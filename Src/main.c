@@ -299,16 +299,12 @@ float fo_r, Wo_r, IWon_r, iir_0_r, iir_1_r, iir_2_r;
 
 /* Encoder position variables */
 /* cnt3, range_error → moved to hardware.c */
+/* previous_encoder_position, max/global/prev_global_max_encoder_position → hardware.c static */
 float encoder_position;
 int encoder_position_steps;
 int encoder_position_init;
-int previous_encoder_position;
-int max_encoder_position;
-int global_max_encoder_position;
-int prev_global_max_encoder_position;
 int encoder_position_down;
-int encoder_position_curr;
-int encoder_position_prev;
+/* encoder_position_curr, encoder_position_prev → local in app_run_control_session() */
 
 /* Angle calibration variables */
 float encoder_position_offset;
@@ -328,13 +324,9 @@ int angle_cal_complete;
 /* Swing Up system variables */
 int enable_swing_up;
 int enable_swing_up_resp;
-bool peaked;
-bool handled_peak;
-int zero_crossed;
-motorDir_t swing_up_direction;
-int swing_up_state, swing_up_state_prev;
-int stage_count;
-int stage_amp;
+/* peaked, handled_peak, zero_crossed,
+   max/global/prev_global_max_encoder_position, previous_encoder_position → hardware.c static */
+/* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
 
 /* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
 
@@ -465,8 +457,7 @@ int char_mode_select;	// Flag detecting whether character mode select entered
 
 
 char message_received[UART_RX_BUFFER_SIZE];
-char mode_string_mode_high_speed_test[UART_RX_BUFFER_SIZE];
-char mode_string_mode_pendulum_sysid_test[UART_RX_BUFFER_SIZE];
+/* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
 /* System timing variables */
 

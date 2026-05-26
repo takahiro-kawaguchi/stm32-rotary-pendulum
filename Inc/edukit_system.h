@@ -608,18 +608,13 @@ extern float c0, c1, c2, c3, c4, ao, Wn2;
 extern float fo_r, Wo_r, IWon_r, iir_0_r, iir_1_r, iir_2_r;
 
 /* Encoder position variables */
-extern uint32_t cnt3;
-extern int range_error;
+/* cnt3, range_error → hardware.c static */
 extern float encoder_position;
 extern int encoder_position_steps;
 extern int encoder_position_init;
-extern int previous_encoder_position;
-extern int max_encoder_position;
-extern int global_max_encoder_position;
-extern int prev_global_max_encoder_position;
+/* previous_encoder_position, max/global/prev_global_max_encoder_position → hardware.c static */
 extern int encoder_position_down;
-extern int encoder_position_curr;
-extern int encoder_position_prev;
+/* encoder_position_curr, encoder_position_prev → local in app_run_control_session() */
 
 /* Angle calibration variables */
 extern float encoder_position_offset;
@@ -639,13 +634,9 @@ extern int angle_cal_complete;
 /* Swing Up system variables */
 extern int enable_swing_up;
 extern int enable_swing_up_resp;
-extern bool peaked;
-extern bool handled_peak;
-extern int zero_crossed;
-extern motorDir_t swing_up_direction;
-extern int swing_up_state, swing_up_state_prev;
-extern int stage_count;
-extern int stage_amp;
+/* peaked, handled_peak, zero_crossed,
+   max/global/prev_global_max/previous_encoder_position → hardware.c static (via hardware_swing_up_*) */
+/* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
 
 /* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
 
@@ -781,8 +772,7 @@ extern int char_mode_select;	// Flag detecting whether character mode select ent
 
 
 extern char message_received[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_high_speed_test[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_pendulum_sysid_test[UART_RX_BUFFER_SIZE];
+/* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
 /* CMSIS Variables */
 extern arm_pid_instance_a_f32 PID_Pend, PID_Rotor;

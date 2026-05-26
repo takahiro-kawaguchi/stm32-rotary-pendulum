@@ -5,14 +5,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Swing-up state globals defined in main.c */
-extern bool     peaked;
-extern bool     handled_peak;
-extern int      zero_crossed;
-extern int      max_encoder_position;
-extern int      global_max_encoder_position;
-extern int      prev_global_max_encoder_position;
-extern int      previous_encoder_position;
+/* Swing-up tracking state — private to hardware layer.
+ * Updated by hardware_encoder_position_read(); exposed via the
+ * hardware_swing_up_*() API defined at the bottom of this file. */
+static bool     peaked;
+static bool     handled_peak;
+static int      zero_crossed;
+static int      max_encoder_position;
+static int      global_max_encoder_position;
+static int      prev_global_max_encoder_position;
+static int      previous_encoder_position;
 
 /* Internal acceleration/PWM control parameters (private to hardware layer) */
 #define HW_PWM_COUNT_SAFETY_MARGIN  2
@@ -36,10 +38,10 @@ volatile uint32_t current_pwm_period;
 float target_velocity_prescaled;
 
 /* Encoder range error (set by encoder_position_read, returned as int) */
-int range_error;
+static int range_error;
 
 /* TIM3 counter staging register */
-uint32_t cnt3;
+static uint32_t cnt3;
 
 /* Private to this file: initialized by hardware_init() */
 static TIM_HandleTypeDef *s_htim3;
@@ -268,11 +270,7 @@ int hardware_rotor_position_read(int *rotor_position)
  * hardware_sensor_read
  *
  * Reads both sensors and populates SensorRaw.
- * Also updates swing-up tracking state if swing_up != NULL.
- *
- * Note: during migration, the main control loop still calls
- * hardware_encoder_position_read() and hardware_rotor_position_read() directly.
- * This function will replace those direct calls in Step 5.
+ * Also copies swing-up tracking state if swing_up != NULL.
  * =========================================================================== */
 void hardware_sensor_read(SensorRaw *out, SwingUpSensorState *swing_up)
 {
@@ -285,14 +283,54 @@ void hardware_sensor_read(SensorRaw *out, SwingUpSensorState *swing_up)
     out->encoder_counts = enc;
     out->rotor_steps    = rotor;
 
-    /* Copy swing-up global state to struct if the caller wants it */
-    if (swing_up != NULL) {
-        swing_up->peaked                      = peaked;
-        swing_up->handled_peak                = handled_peak;
-        swing_up->zero_crossed                = zero_crossed;
-        swing_up->max_encoder_position        = max_encoder_position;
-        swing_up->global_max_encoder_position = global_max_encoder_position;
-        swing_up->prev_global_max_encoder_position = prev_global_max_encoder_position;
-        swing_up->previous_encoder_position   = previous_encoder_position;
-    }
+    if (swing_up != NULL)
+        hardware_swing_up_get(swing_up);
+}
+
+
+/* ===========================================================================
+ * Swing-up tracking state API
+ * =========================================================================== */
+
+void hardware_swing_up_reset(void)
+{
+    peaked                       = false;
+    handled_peak                 = false;
+    zero_crossed                 = 0;
+    max_encoder_position         = 0;
+    global_max_encoder_position  = 0;
+    prev_global_max_encoder_position = 0;
+    previous_encoder_position    = 0;
+}
+
+void hardware_swing_up_get(SwingUpSensorState *out)
+{
+    out->peaked                       = peaked;
+    out->handled_peak                 = handled_peak;
+    out->zero_crossed                 = zero_crossed;
+    out->max_encoder_position         = max_encoder_position;
+    out->global_max_encoder_position  = global_max_encoder_position;
+    out->prev_global_max_encoder_position = prev_global_max_encoder_position;
+    out->previous_encoder_position    = previous_encoder_position;
+}
+
+void hardware_swing_up_clear_zero_crossed(void)
+{
+    zero_crossed = 0;
+}
+
+void hardware_swing_up_set_prev_global_max(int val)
+{
+    prev_global_max_encoder_position = val;
+}
+
+void hardware_swing_up_reset_global_max(void)
+{
+    global_max_encoder_position = 0;
+}
+
+void hardware_swing_up_handle_peak(void)
+{
+    handled_peak         = true;
+    max_encoder_position = 0;
 }

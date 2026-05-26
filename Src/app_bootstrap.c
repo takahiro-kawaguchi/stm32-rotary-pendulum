@@ -16,8 +16,6 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 
 	encoder_position = 0;
 	encoder_position_down = 0;
-	encoder_position_curr = 0;
-	encoder_position_prev = 0;
 	angle_scale = ENCODER_READ_ANGLE_SCALE;
 
 	rotor_control_target_steps = 0;

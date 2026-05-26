@@ -144,4 +144,23 @@ void Main_StepClockHandler(void);
  */
 int Delay_Pulse(void);
 
+/* ---- Swing-up tracking state API --------------------------------------- */
+
+/* Zero all swing-up tracking state.  Call once before each swing-up attempt. */
+void hardware_swing_up_reset(void);
+
+/* Copy current swing-up tracking state into *out. */
+void hardware_swing_up_get(SwingUpSensorState *out);
+
+/* Acknowledge the zero-crossing event (sets zero_crossed = 0). */
+void hardware_swing_up_clear_zero_crossed(void);
+
+/* Record global_max into prev_global_max, then reset global_max to 0.
+ * Pass the current global_max value obtained from hardware_swing_up_get(). */
+void hardware_swing_up_set_prev_global_max(int val);
+void hardware_swing_up_reset_global_max(void);
+
+/* Acknowledge a peak: sets handled_peak = true, resets max_encoder_position = 0. */
+void hardware_swing_up_handle_peak(void);
+
 #endif /* HARDWARE_H */

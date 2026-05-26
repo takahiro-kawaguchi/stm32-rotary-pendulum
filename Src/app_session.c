@@ -12,6 +12,10 @@
 void app_run_control_session(AppControlContext *ctx)
 {
 	int i = 0, k, m, ret;
+	int encoder_position_curr, encoder_position_prev;
+	motorDir_t swing_up_direction;
+	int swing_up_state;
+	int stage_count, stage_amp;
 
 	enable_control_action = ENABLE_CONTROL_ACTION;
 
@@ -260,13 +264,8 @@ void app_run_control_session(AppControlContext *ctx)
 		sprintf(msg, "Pendulum Swing Up Starting\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-		max_encoder_position = 0;
-		global_max_encoder_position = 0;
-		peaked = 0;
-		handled_peak = 0;
+		hardware_swing_up_reset();
 		swing_up_state = 0;
-		swing_up_state_prev = 0;
-		zero_crossed = 0;
 		stage_count = 0;
 		stage_amp = STAGE_0_AMP;
 
@@ -275,9 +274,11 @@ void app_run_control_session(AppControlContext *ctx)
 		BSP_MotorControl_WaitWhileActive(0);
 
 		while (1) {
+			SwingUpSensorState sus;
 			HAL_Delay(2);
 			ret = hardware_encoder_position_read(&encoder_position_steps,
 					encoder_position_init, &htim3);
+			hardware_swing_up_get(&sus);
 
 			if (fabs(
 					encoder_position_steps - encoder_position_down
@@ -292,36 +293,36 @@ void app_run_control_session(AppControlContext *ctx)
 				break;
 			}
 
-			if (zero_crossed) {
-				zero_crossed = 0;
+			if (sus.zero_crossed) {
+				hardware_swing_up_clear_zero_crossed();
 				if (swing_up_state == 0) {
 					BSP_MotorControl_Move(0, swing_up_direction, stage_amp);
 					BSP_MotorControl_WaitWhileActive(0);
 					stage_count++;
 
-					if (prev_global_max_encoder_position != global_max_encoder_position
+					if (sus.prev_global_max_encoder_position != sus.global_max_encoder_position
 							&& stage_count > 4) {
-						if (abs(global_max_encoder_position) < 600) {
+						if (abs(sus.global_max_encoder_position) < 600) {
 							stage_amp = STAGE_0_AMP;
 						}
-						if (abs(global_max_encoder_position) >= 600
-								&& abs(global_max_encoder_position) < 1000) {
+						if (abs(sus.global_max_encoder_position) >= 600
+								&& abs(sus.global_max_encoder_position) < 1000) {
 							stage_amp = STAGE_1_AMP;
 						}
-						if (abs(global_max_encoder_position) >= 1000) {
+						if (abs(sus.global_max_encoder_position) >= 1000) {
 							stage_amp = STAGE_2_AMP;
 						}
 					}
-					prev_global_max_encoder_position = global_max_encoder_position;
-					global_max_encoder_position = 0;
+					hardware_swing_up_set_prev_global_max(sus.global_max_encoder_position);
+					hardware_swing_up_reset_global_max();
 					ret = hardware_encoder_position_read(&encoder_position_steps,
 							encoder_position_init, &htim3);
+					hardware_swing_up_get(&sus);
 				}
 			}
 
-			if (peaked && !handled_peak) {
-				handled_peak = 1;
-				max_encoder_position = 0;
+			if (sus.peaked && !sus.handled_peak) {
+				hardware_swing_up_handle_peak();
 				swing_up_direction =
 						swing_up_direction == FORWARD ? BACKWARD : FORWARD;
 			}
