@@ -73,6 +73,11 @@ static char mode_string_disable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_enable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_reset_system[UART_RX_BUFFER_SIZE];
 
+/* Mode command state + session response flags (moved from main.c) */
+static int mode_index_command;
+static int enable_angle_cal_resp;
+static int enable_swing_up_resp;
+
 /* Rotor high-speed test / sysid / motor characterization variables (moved from main.c) */
 static int rotor_test_speed_min, rotor_test_speed_max;
 static int rotor_test_acceleration_max, swing_deceleration_max;
@@ -366,10 +371,9 @@ int mode_index_identification(char * user_config_input, int config_command_contr
 		enable_high_speed_sampling = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_speed_prescale ) == 0 ){
-		enable_speed_prescale = 1;
+		/* enable_speed_prescale was write-only; keep config_command to acknowledge the command */
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_speed_prescale ) == 0 ){
-		enable_speed_prescale = 0;
 		config_command = 1;
 	} else if  (strcmp(user_config_input, mode_string_disable_speed_governor ) == 0 ){
 		speed_governor = 0;
@@ -537,8 +541,6 @@ int ui_process_runtime_input(int cycle_index,
 		arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor)
 {
-	mode_index_prev = mode_index;
-
 	RxBuffer_WriteIdx = UART_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
 	readBytes = Extract_Msg(RxBuffer, RxBuffer_ReadIdx, RxBuffer_WriteIdx,
 			UART_RX_BUFFER_SIZE, &Msg);

@@ -207,7 +207,7 @@ uint8_t RxBuffer[UART_RX_BUFFER_SIZE];
 /* apply_acc_start_time, clock_int_time, clock_int_tick,
    desired_pwm_period, current_pwm_period, target_velocity_prescaled
    → moved to hardware.c */
-int32_t enable_speed_prescale;
+/* enable_speed_prescale → write-only (never read), removed */
 
 /* System data reporting */
 char tmp_string[256];
@@ -226,15 +226,6 @@ static AppControlContext g_app = {
 	.core_controller_ops = &CONTROLLER_OPS_DEFAULT,
 	.core_command_shaper_ops = &COMMAND_SHAPER_OPS_DEFAULT,
 };
-
-/* Transitional aliases: keep call sites stable while globals are consolidated. */
-
-/*
-  * Timer 3, UART Transmit, and UART DMA Receive declarations
-  */
-
-UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart2_rx;
 
 /* Control system output signal */
 float rotor_control_target_steps;
@@ -310,7 +301,7 @@ int encoder_position_down;
 float encoder_position_offset;
 float encoder_position_offset_zero;
 int enable_angle_cal;
-int enable_angle_cal_resp;
+/* enable_angle_cal_resp → ui.c static */
 int offset_end_state;
 int offset_start_index;
 int angle_index;
@@ -323,7 +314,7 @@ int angle_cal_complete;
 
 /* Swing Up system variables */
 int enable_swing_up;
-int enable_swing_up_resp;
+/* enable_swing_up_resp → ui.c static */
 /* peaked, handled_peak, zero_crossed,
    max/global/prev_global_max_encoder_position, previous_encoder_position → hardware.c static */
 /* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
@@ -441,8 +432,8 @@ int speed_governor;
 
 int mode_interactive;	// Enable continued terminal interactive user session
 /* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → moved to ui.c (static) */
-int mode_index_prev, mode_index_command;
-int mode_transition_tick;
+/* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
+/* mode_transition_tick → never used, removed */
 int mode_transition_state;
 int transition_to_adaptive_mode;
 

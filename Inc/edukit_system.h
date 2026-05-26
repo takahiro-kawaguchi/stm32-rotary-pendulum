@@ -514,7 +514,7 @@ extern volatile uint32_t desired_pwm_period;
 extern volatile uint32_t current_pwm_period;
 
 extern float target_velocity_prescaled;
-extern int32_t enable_speed_prescale;
+/* enable_speed_prescale → write-only (never read), removed */
 
 /* System data reporting */
 extern char tmp_string[256];
@@ -620,7 +620,7 @@ extern int encoder_position_down;
 extern float encoder_position_offset;
 extern float encoder_position_offset_zero;
 extern int enable_angle_cal;
-extern int enable_angle_cal_resp;
+/* enable_angle_cal_resp → ui.c static */
 extern int offset_end_state;
 extern int offset_start_index;
 extern int angle_index;
@@ -633,7 +633,7 @@ extern int angle_cal_complete;
 
 /* Swing Up system variables */
 extern int enable_swing_up;
-extern int enable_swing_up_resp;
+/* enable_swing_up_resp → ui.c static */
 /* peaked, handled_peak, zero_crossed,
    max/global/prev_global_max/previous_encoder_position → hardware.c static (via hardware_swing_up_*) */
 /* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
@@ -758,8 +758,8 @@ extern int speed_governor;
 
 extern int mode_interactive;	// Enable continued terminal interactive user session
 /* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → ui.c (static) */
-extern int mode_index_prev, mode_index_command;
-extern int mode_transition_tick;
+/* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
+/* mode_transition_tick → never used, removed */
 extern int mode_transition_state;
 extern int transition_to_adaptive_mode;
 
