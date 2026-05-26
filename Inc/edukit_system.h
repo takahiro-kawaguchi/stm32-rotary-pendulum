@@ -65,6 +65,8 @@
  ******************************************************************************
  */
 
+#include <stdbool.h>
+
 /*
  * Control System and Motor Configuration Parameter Definitions
  */
@@ -456,39 +458,11 @@ extern void pid_filter_control_execute(arm_pid_instance_a_f32 *PID, float * curr
 extern int encoder_position_read(int *encoder_position, int encoder_position_init, TIM_HandleTypeDef *htim3);
 extern int rotor_position_read(int *rotor_position);
 
-extern void set_mode_strings(void);
-extern void get_user_mode_index(char * user_string, int * char_mode_select, int * mode_index, int * mode_interactive);
-extern void rotor_position_set(void);
-extern void select_mode_1(void);
-extern void user_configuration(void);
-extern void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, int * int_return);
-extern void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return);
-extern void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, char * char_return);
+/* UI functions → declared in ui.h */
+/* Hardware functions → declared in hardware.h */
+extern void rotor_position_set(void);  /* legacy alias for hardware_rotor_home(), defined in hardware.c */
 
-extern void select_mode_1(void);
-extern void user_configuration(void);
-extern int Delay_Pulse();
-extern void Main_StepClockHandler();
-extern void apply_acceleration(float * acc, float* target_velocity_prescaled, float t_sample);
-
-extern void user_prompt(void);
-extern void rotor_actuator_high_speed_test(void);
-extern void rotor_encoder_test(void);
-extern void pendulum_system_id_test(void);
-extern void motor_actuator_characterization_mode(void);
-extern void interactive_rotor_actuator_control(void);
-
-extern void user_configuration(void);
-extern int mode_index_identification(char * user_config_input, int config_command_control, float *adjust_increment,
-		arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
-extern void assign_mode_1(arm_pid_instance_a_f32 *PID_Pend,
-		arm_pid_instance_a_f32 *PID_Rotor);
-extern void assign_mode_2(arm_pid_instance_a_f32 *PID_Pend,
-		arm_pid_instance_a_f32 *PID_Rotor);
-extern void assign_mode_3(arm_pid_instance_a_f32 *PID_Pend,
-		arm_pid_instance_a_f32 *PID_Rotor);
-
-extern bool oppositeSigns(int x, int y);
+/* oppositeSigns → static in hardware.c, not accessible externally */
 
 extern volatile uint16_t gLastError;
 /* Private function prototypes -----------------------------------------------*/
@@ -560,7 +534,7 @@ extern uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
 extern volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, target_cpu_cycle, prev_target_cpu_cycle;
 extern volatile int current_cpu_cycle_delay_relative_report;
 
-uint32_t t_sample_cpu_cycles;
+extern uint32_t t_sample_cpu_cycles;
 extern float Tsample, Tsample_rotor, test_time;
 extern float angle_scale;
 extern int enable_high_speed_sampling;
@@ -716,7 +690,7 @@ extern int impulse_start_index;
 
 /* User configuration variables */
 extern int clear_input;
-uint32_t enable_control_action;
+extern uint32_t enable_control_action;
 extern int max_speed_read, min_speed_read;
 extern int select_suspended_mode;
 extern int motor_response_model;
@@ -934,7 +908,7 @@ extern char mode_string_mode_plant_dist_step[UART_RX_BUFFER_SIZE];
 extern char mode_string_stop[UART_RX_BUFFER_SIZE];
 
 /* CMSIS Variables */
-arm_pid_instance_a_f32 PID_Pend, PID_Rotor;
+extern arm_pid_instance_a_f32 PID_Pend, PID_Rotor;
 extern float Deriv_Filt_Pend[2];
 extern float Deriv_Filt_Rotor[2];
 extern float Wo_t, fo_t, IWon_t;
