@@ -88,3 +88,64 @@ void controller_compute(ControllerState     *state,
         out->rotor_accel_steps_s2 += state->PID_Rotor.control_output;
     }
 }
+
+void controller_compute_dual_pid(ControllerState              *state,
+                                 const SystemState            *sys,
+                                 ControlTarget                *target,
+                                 const ControllerDualPidInput *input,
+                                 ControllerDualPidRuntime     *runtime,
+                                 ControlOutput                *out)
+{
+    float rotor_error_steps = runtime->current_error_rotor_steps;
+
+    if (input->enable_state_feedback == 0 && input->enable_disturbance_rejection_step == 0
+            && input->enable_sensitivity_fnc_step == 0 && input->enable_noise_rejection_step == 0) {
+        rotor_error_steps = input->rotor_position_filter_steps - input->rotor_position_command_steps;
+    }
+    if (input->enable_state_feedback == 0 && input->enable_disturbance_rejection_step == 1
+            && input->enable_sensitivity_fnc_step == 0 && input->enable_noise_rejection_step == 0) {
+        rotor_error_steps = input->rotor_position_filter_steps;
+    }
+    if (input->enable_state_feedback == 0 && input->enable_disturbance_rejection_step == 0
+            && input->enable_sensitivity_fnc_step == 0 && input->enable_noise_rejection_step == 1) {
+        rotor_error_steps = input->rotor_position_filter_steps + input->rotor_position_command_steps;
+    }
+    if (input->enable_state_feedback == 0 && input->enable_disturbance_rejection_step == 0
+            && input->enable_sensitivity_fnc_step == 1 && input->enable_noise_rejection_step == 0) {
+        rotor_error_steps = input->rotor_position_filter_steps - input->rotor_position_command_steps;
+    }
+    if (input->enable_state_feedback == 1) {
+        rotor_error_steps = input->rotor_position_filter_steps;
+    }
+
+    runtime->current_error_rotor_steps = rotor_error_steps;
+    target->rotor_angle_ref_rad = sys->rotor_angle_rad - rotor_error_steps * STEPPER_RAD_PER_STEP;
+
+    controller_compute(state, sys, target, out);
+
+    if (input->enable_state_feedback == 1 && input->integral_compensator_gain != 0.0f) {
+        runtime->current_error_rotor_integral = runtime->current_error_rotor_integral
+                + (input->rotor_position_command_steps * input->feedforward_gain
+                        - input->rotor_position_filter_steps)
+                        * input->sample_period_rotor_s;
+        out->rotor_accel_steps_s2 = out->rotor_accel_steps_s2
+                - input->integral_compensator_gain * runtime->current_error_rotor_integral;
+    }
+
+    if (input->enable_state_feedback == 1 && input->integral_compensator_gain == 0.0f) {
+        out->rotor_accel_steps_s2 = out->rotor_accel_steps_s2
+                - input->rotor_position_command_steps * input->feedforward_gain;
+    }
+
+    if (input->enable_disturbance_rejection_step == 1) {
+        out->rotor_accel_steps_s2 = out->rotor_accel_steps_s2
+                + input->rotor_position_command_steps
+                        * input->load_disturbance_sensitivity_scale;
+    }
+}
+
+const ControllerOps CONTROLLER_OPS_DEFAULT = {
+    .init = controller_init,
+    .compute = controller_compute,
+    .compute_dual = controller_compute_dual_pid,
+};

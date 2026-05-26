@@ -1,0 +1,379 @@
+#include "main.h"
+#include "edukit_system.h"
+#include "hardware.h"
+#include "app_control.h"
+#include "app_runtime.h"
+#include "app_session.h"
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+void app_run_control_session(AppControlContext *ctx)
+{
+	enable_control_action = ENABLE_CONTROL_ACTION;
+
+	if (reset_state == 1) {
+		hardware_rotor_home();
+	}
+	ret = hardware_rotor_position_read(&rotor_position_steps);
+	sprintf(msg, "\r\nPrepare for Control Start - Initial Rotor Position: %i\r\n",
+			rotor_position_steps);
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+	BSP_MotorControl_GoTo(0, 3);
+	BSP_MotorControl_WaitWhileActive(0);
+	HAL_Delay(150);
+	BSP_MotorControl_GoTo(0, -3);
+	BSP_MotorControl_WaitWhileActive(0);
+	HAL_Delay(150);
+	BSP_MotorControl_GoTo(0, 3);
+	BSP_MotorControl_WaitWhileActive(0);
+	HAL_Delay(150);
+	BSP_MotorControl_GoTo(0, 0);
+	BSP_MotorControl_WaitWhileActive(0);
+
+	sprintf(msg, "Test for Pendulum at Rest - Waiting for Pendulum to Stabilize\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+	encoder_position_init = 0;
+	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+			&htim3);
+	encoder_position_prev = encoder_position_steps;
+	HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
+	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+			&htim3);
+	encoder_position_curr = encoder_position_steps;
+	while (encoder_position_curr != encoder_position_prev) {
+		ret = hardware_encoder_position_read(&encoder_position_steps,
+				encoder_position_init, &htim3);
+		encoder_position_prev = encoder_position_steps;
+		HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
+		ret = hardware_encoder_position_read(&encoder_position_steps,
+				encoder_position_init, &htim3);
+		encoder_position_curr = encoder_position_steps;
+
+		if (encoder_position_prev == encoder_position_curr) {
+			HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
+			ret = hardware_encoder_position_read(&encoder_position_steps,
+					encoder_position_init, &htim3);
+			encoder_position_prev = encoder_position_steps;
+			HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
+			ret = hardware_encoder_position_read(&encoder_position_steps,
+					encoder_position_init, &htim3);
+			encoder_position_curr = encoder_position_steps;
+			if (encoder_position_prev == encoder_position_curr) {
+				break;
+			}
+		}
+		sprintf(msg,
+				"Pendulum Motion Detected with angle %0.2f - Waiting for Pendulum to Stabilize\r\n",
+				(float) ((encoder_position_curr - encoder_position_prev)
+						/ ENCODER_READ_ANGLE_SCALE));
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+
+	sprintf(msg, "Pendulum Now at Rest and Measuring Pendulum Down Angle\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+	HAL_Delay(100);
+	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+			&htim3);
+	encoder_position_init = encoder_position_steps;
+
+	if (ret == -1) {
+		sprintf(msg, "Encoder Position Under Range Error\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+	if (ret == 1) {
+		sprintf(msg, "Encoder Position Over Range Error\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+
+	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+			&htim3);
+	encoder_position_down = encoder_position_steps;
+	sprintf(msg, "Pendulum Initial Angle %i\r\n", encoder_position_steps);
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+	if (enable_swing_up == 0) {
+		BSP_MotorControl_GoTo(0, 30);
+		BSP_MotorControl_WaitWhileActive(0);
+		HAL_Delay(150);
+		BSP_MotorControl_GoTo(0, -30);
+		BSP_MotorControl_WaitWhileActive(0);
+		HAL_Delay(150);
+		BSP_MotorControl_GoTo(0, 30);
+		BSP_MotorControl_WaitWhileActive(0);
+		HAL_Delay(150);
+		BSP_MotorControl_GoTo(0, 0);
+		BSP_MotorControl_WaitWhileActive(0);
+
+		if (select_suspended_mode == 0) {
+			sprintf(msg,
+					"Adjust Pendulum Upright By Turning CCW Control Will Start When Vertical\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		}
+	}
+
+	if (enable_swing_up == 0) {
+		tick_wait_start = HAL_GetTick();
+		if (select_suspended_mode == 0) {
+			while (1) {
+				ret = hardware_encoder_position_read(&encoder_position_steps,
+						encoder_position_init, &htim3);
+				if (fabs(
+						encoder_position_steps - encoder_position_down
+								- (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+					HAL_Delay(START_ANGLE_DELAY);
+					break;
+				}
+				if (fabs(
+						encoder_position_steps - encoder_position_down
+								+ (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+					encoder_position_down = encoder_position_down
+							- 2 * (int) (180 * angle_scale);
+					HAL_Delay(START_ANGLE_DELAY);
+					break;
+				}
+				tick_wait = HAL_GetTick();
+
+				if ((tick_wait - tick_wait_start)
+						> PENDULUM_ORIENTATION_START_DELAY) {
+					sprintf(msg,
+							"Pendulum Upright Action Not Detected - Restarting ...\r\n");
+					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
+							HAL_MAX_DELAY);
+					enable_control_action = 0;
+					break;
+				}
+			}
+		}
+	}
+
+	if (select_suspended_mode == 1) {
+		sprintf(msg, "Suspended Mode Control Will Start in %i Seconds\r\n",
+				(int) (CONTROL_START_DELAY / 1000));
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+
+	*current_error_steps = 0;
+	*current_error_rotor_steps = 0;
+
+	cycle_count = CYCLE_LIMIT;
+	i = 0;
+	rotor_position_steps = 0;
+	rotor_position_steps_prev = 0;
+	rotor_position_filter_steps = 0;
+	rotor_position_filter_steps_prev = 0;
+	rotor_position_command_steps = 0;
+	rotor_position_diff = 0;
+	rotor_position_diff_prev = 0;
+	rotor_position_diff_filter = 0;
+	rotor_position_diff_filter_prev = 0;
+	rotor_position_step_polarity = 1;
+	encoder_angle_slope_corr_steps = 0;
+	rotor_sine_drive = 0;
+	sine_drive_transition = 0;
+	rotor_mod_control = 1.0;
+	enable_adaptive_mode = 0;
+	tick_cycle_start = HAL_GetTick();
+	tick_cycle_previous = tick_cycle_start;
+	tick_cycle_current = tick_cycle_start;
+	enable_cycle_delay_warning = ENABLE_CYCLE_DELAY_WARNING;
+	chirp_cycle = 0;
+	chirp_dwell_cycle = 0;
+	pendulum_position_command_steps = 0;
+	impulse_start_index = 0;
+	mode_transition_state = 0;
+	transition_to_adaptive_mode = 0;
+	error_sum_prev = 0;
+	error_sum_filter_prev = 0;
+	adaptive_state = 4;
+	app_reset_command_shaper_state(ctx);
+	rotor_position_command_steps_pf_prev = 0;
+	enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
+	slope_prev = 0;
+	rotor_track_comb_command = 0;
+	noise_rej_signal_prev = 0;
+	noise_rej_signal_filter_prev = 0;
+	full_sysid_start_index = -1;
+	current_cpu_cycle = 0;
+	speed_scale = DATA_REPORT_SPEED_SCALE;
+	speed_governor = 0;
+	encoder_position_offset = 0;
+	encoder_position_offset_zero = 0;
+
+	for (m = 0; m < ANGLE_CAL_OFFSET_STEP_COUNT + 1; m++) {
+		offset_angle[m] = 0;
+	}
+
+	for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
+		Msg.Data[k] = 0;
+	}
+	__HAL_DMA_RESET_HANDLE_STATE(&hdma_usart2_rx);
+
+	init_r_p_gain = ctx->core_ctl_state.PID_Rotor.Kp;
+	init_r_i_gain = ctx->core_ctl_state.PID_Rotor.Ki;
+	init_r_d_gain = ctx->core_ctl_state.PID_Rotor.Kd;
+	init_p_p_gain = ctx->core_ctl_state.PID_Pend.Kp;
+	init_p_i_gain = ctx->core_ctl_state.PID_Pend.Ki;
+	init_p_d_gain = ctx->core_ctl_state.PID_Pend.Kd;
+	init_enable_state_feedback = enable_state_feedback;
+	init_integral_compensator_gain = integral_compensator_gain;
+	init_feedforward_gain = feedforward_gain;
+	init_enable_state_feedback = enable_state_feedback;
+	init_enable_disturbance_rejection_step = enable_disturbance_rejection_step;
+	init_enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
+	init_enable_noise_rejection_step = enable_noise_rejection_step;
+	init_enable_rotor_plant_design = enable_rotor_plant_design;
+	init_enable_rotor_plant_gain_design = enable_rotor_plant_gain_design;
+
+	if (select_suspended_mode == 1) {
+		load_disturbance_sensitivity_scale = 1.0;
+	}
+	if (select_suspended_mode == 0) {
+		load_disturbance_sensitivity_scale = LOAD_DISTURBANCE_SENSITIVITY_SCALE;
+	}
+
+	if (enable_swing_up == 1 && select_suspended_mode == 0) {
+		ctx->core_ctl_state.PID_Rotor.Kp = 20;
+		ctx->core_ctl_state.PID_Rotor.Ki = 10;
+		ctx->core_ctl_state.PID_Rotor.Kd = 10;
+		ctx->core_ctl_state.PID_Pend.Kp = 300;
+		ctx->core_ctl_state.PID_Pend.Ki = 0.0;
+		ctx->core_ctl_state.PID_Pend.Kd = 30.0;
+		enable_state_feedback = 0;
+		integral_compensator_gain = 0;
+		feedforward_gain = 1;
+		rotor_position_command_steps = 0;
+		enable_state_feedback = 0;
+		enable_disturbance_rejection_step = 0;
+		enable_sensitivity_fnc_step = 0;
+		enable_noise_rejection_step = 0;
+		enable_rotor_plant_design = 0;
+		enable_rotor_plant_gain_design = 0;
+
+		torq_current_val = MAX_TORQUE_SWING_UP;
+		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+
+		sprintf(msg, "Pendulum Swing Up Starting\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+		max_encoder_position = 0;
+		global_max_encoder_position = 0;
+		peaked = 0;
+		handled_peak = 0;
+		swing_up_state = 0;
+		swing_up_state_prev = 0;
+		zero_crossed = 0;
+		stage_count = 0;
+		stage_amp = STAGE_0_AMP;
+
+		swing_up_direction = FORWARD;
+		BSP_MotorControl_Move(0, swing_up_direction, 150);
+		BSP_MotorControl_WaitWhileActive(0);
+
+		while (1) {
+			HAL_Delay(2);
+			ret = hardware_encoder_position_read(&encoder_position_steps,
+					encoder_position_init, &htim3);
+
+			if (fabs(
+					encoder_position_steps - encoder_position_down
+							- (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+				break;
+			}
+			if (fabs(
+					encoder_position_steps - encoder_position_down
+							+ (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+				encoder_position_down = encoder_position_down
+						- 2 * (int) (180 * angle_scale);
+				break;
+			}
+
+			if (zero_crossed) {
+				zero_crossed = 0;
+				if (swing_up_state == 0) {
+					BSP_MotorControl_Move(0, swing_up_direction, stage_amp);
+					BSP_MotorControl_WaitWhileActive(0);
+					stage_count++;
+
+					if (prev_global_max_encoder_position != global_max_encoder_position
+							&& stage_count > 4) {
+						if (abs(global_max_encoder_position) < 600) {
+							stage_amp = STAGE_0_AMP;
+						}
+						if (abs(global_max_encoder_position) >= 600
+								&& abs(global_max_encoder_position) < 1000) {
+							stage_amp = STAGE_1_AMP;
+						}
+						if (abs(global_max_encoder_position) >= 1000) {
+							stage_amp = STAGE_2_AMP;
+						}
+					}
+					prev_global_max_encoder_position = global_max_encoder_position;
+					global_max_encoder_position = 0;
+					ret = hardware_encoder_position_read(&encoder_position_steps,
+							encoder_position_init, &htim3);
+				}
+			}
+
+			if (peaked && !handled_peak) {
+				handled_peak = 1;
+				max_encoder_position = 0;
+				swing_up_direction =
+						swing_up_direction == FORWARD ? BACKWARD : FORWARD;
+			}
+		}
+	}
+
+	enable_control_action = 1;
+
+	if (ACCEL_CONTROL == 1) {
+		BSP_MotorControl_HardStop(0);
+		L6474_CmdEnable(0);
+		target_velocity_prescaled = 0;
+		L6474_Board_SetDirectionGpio(0, BACKWARD);
+	}
+
+	torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+
+	target_cpu_cycle = DWT->CYCCNT;
+	prev_cpu_cycle = DWT->CYCCNT;
+
+	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+			&htim3);
+	if (select_suspended_mode == 0) {
+		encoder_position = encoder_position_steps - encoder_position_down
+				- (int) (180 * angle_scale);
+		encoder_position = encoder_position - encoder_position_offset;
+	}
+
+	app_init_control_pipeline(ctx, encoder_position_init, Tsample);
+
+	while (enable_control_action == 1) {
+		ret = control_handle_runtime_configuration(ctx, i);
+		if (ret < 0) {
+			break;
+		}
+		if (ret > 0) {
+			continue;
+		}
+
+		if (i < 1) {
+			ctx->core_ctl_state.PID_Pend.int_term = 0;
+			ctx->core_ctl_state.PID_Rotor.int_term = 0;
+		}
+
+		ret = control_execute_cycle(ctx, i);
+		if (ret != 0) {
+			break;
+		}
+
+		i++;
+	}
+
+	control_shutdown_sequence(ctx);
+}

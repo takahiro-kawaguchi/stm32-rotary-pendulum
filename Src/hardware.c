@@ -193,7 +193,7 @@ static bool oppositeSigns(int x, int y)
 
 
 /* ===========================================================================
- * encoder_position_read
+ * hardware_encoder_position_read
  *
  * Reads TIM3 quadrature counter and converts to a signed integer relative
  * to the initial count captured at startup.
@@ -202,7 +202,7 @@ static bool oppositeSigns(int x, int y)
  * Swing-up tracking by Markus Dauberschmidt.
  * See https://github.com/OevreFlataeker/steval_edukit_swingup
  * =========================================================================== */
-int encoder_position_read(int *encoder_position,
+int hardware_encoder_position_read(int *encoder_position,
                                    int  encoder_position_init,
                                    TIM_HandleTypeDef *htim3)
 {
@@ -245,20 +245,11 @@ int encoder_position_read(int *encoder_position,
 
 
 /* ===========================================================================
- * rotor_position_set  (legacy name; use hardware_rotor_home() in new code)
- * =========================================================================== */
-void rotor_position_set(void)
-{
-    hardware_rotor_home();
-}
-
-
-/* ===========================================================================
  * rotor_position_read
  *
  * Reads the L6474 microstep accumulator and converts to a signed integer.
  * =========================================================================== */
-int rotor_position_read(int *rotor_position)
+int hardware_rotor_position_read(int *rotor_position)
 {
     uint32_t rotor_u;
     int ret;
@@ -280,7 +271,7 @@ int rotor_position_read(int *rotor_position)
  * Also updates swing-up tracking state if swing_up != NULL.
  *
  * Note: during migration, the main control loop still calls
- * encoder_position_read() and rotor_position_read() directly.
+ * hardware_encoder_position_read() and hardware_rotor_position_read() directly.
  * This function will replace those direct calls in Step 5.
  * =========================================================================== */
 void hardware_sensor_read(SensorRaw *out, SwingUpSensorState *swing_up)
@@ -288,8 +279,8 @@ void hardware_sensor_read(SensorRaw *out, SwingUpSensorState *swing_up)
     int enc   = 0;
     int rotor = 0;
 
-    encoder_position_read(&enc, s_encoder_init, s_htim3);
-    rotor_position_read  (&rotor);
+    hardware_encoder_position_read(&enc, s_encoder_init, s_htim3);
+    hardware_rotor_position_read(&rotor);
 
     out->encoder_counts = enc;
     out->rotor_steps    = rotor;

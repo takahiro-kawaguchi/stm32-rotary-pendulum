@@ -454,12 +454,9 @@ typedef struct
 
 /* pid_filter_control_execute → private pid_execute in controller.c */
 
-extern int encoder_position_read(int *encoder_position, int encoder_position_init, TIM_HandleTypeDef *htim3);
-extern int rotor_position_read(int *rotor_position);
 
 /* UI functions → declared in ui.h */
 /* Hardware functions → declared in hardware.h */
-extern void rotor_position_set(void);  /* legacy alias for hardware_rotor_home(), defined in hardware.c */
 
 /* oppositeSigns → static in hardware.c, not accessible externally */
 

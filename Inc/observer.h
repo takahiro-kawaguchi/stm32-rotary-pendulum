@@ -50,4 +50,19 @@ void observer_update(const SensorRaw   *raw,
                      ObserverState     *state,
                      SystemState       *out);
 
+/*
+ * ObserverOps: pluggable observer interface.
+ * Replace these function pointers to swap observer implementation.
+ */
+typedef struct {
+    void (*init)(ObserverState *state, float sample_period_s);
+    void (*update)(const SensorRaw   *raw,
+                   const SensorCalib *cal,
+                   ObserverState     *state,
+                   SystemState       *out);
+} ObserverOps;
+
+/* Default observer implementation (observer_init/observer_update). */
+extern const ObserverOps OBSERVER_OPS_DEFAULT;
+
 #endif /* OBSERVER_H */

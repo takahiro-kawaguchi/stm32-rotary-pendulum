@@ -454,6 +454,61 @@ void set_mode_strings(void){
 	mode_quit = 0;
 }
 
+int ui_process_runtime_input(int cycle_index,
+		arm_pid_instance_a_f32 *PID_Pend,
+		arm_pid_instance_a_f32 *PID_Rotor)
+{
+	mode_index_prev = mode_index;
+
+	RxBuffer_WriteIdx = UART_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
+	readBytes = Extract_Msg(RxBuffer, RxBuffer_ReadIdx, RxBuffer_WriteIdx,
+			UART_RX_BUFFER_SIZE, &Msg);
+
+	config_command = 0;
+	if (readBytes == 1) {
+		RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
+		return 1;
+	}
+
+	if (readBytes == 2 && Msg.Len == 1 && cycle_index % 10 == 0) {
+		RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
+		mode_transition_state = 1;
+		mode_index_command = mode_index_identification((char *) Msg.Data, config_command,
+				&adjust_increment, PID_Pend, PID_Rotor);
+		strcpy(config_message, (char *) Msg.Data);
+		if (strcmp(config_message, ">") == 0) {
+			if (enable_full_sysid && full_sysid_start_index == -1) {
+				full_sysid_start_index = cycle_index + 50;
+			}
+		} else if (strcmp(config_message, "q") == 0) {
+			const char *exit_msg = "\n\rExit Control Loop Command Received ";
+			HAL_UART_Transmit(&huart2, (uint8_t*) exit_msg, strlen(exit_msg), HAL_MAX_DELAY);
+			return -1;
+		}
+	}
+
+	if (mode_index_command == 1 && mode_transition_state == 1) {
+		mode_index = 1;
+		mode_transition_state = 0;
+		mode_index_command = 0;
+		assign_mode_1(PID_Pend, PID_Rotor);
+	}
+	if (mode_index_command == 2 && mode_transition_state == 1) {
+		mode_index = 2;
+		mode_transition_state = 0;
+		mode_index_command = 0;
+		assign_mode_2(PID_Pend, PID_Rotor);
+	}
+	if (mode_index_command == 3 && mode_transition_state == 1) {
+		mode_index = 3;
+		mode_transition_state = 0;
+		mode_index_command = 0;
+		assign_mode_3(PID_Pend, PID_Rotor);
+	}
+
+	return 0;
+}
+
 void user_prompt(void){
 	sprintf(msg, "\n\r********  System Start Mode Selections  ********\n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -2289,7 +2344,7 @@ void rotor_encoder_test(void){
 		sprintf(msg, "\r\n\r\n********  Starting Rotor Motor Control Test  ********\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
-		ret = rotor_position_read(&rotor_position_steps);
+		ret = hardware_rotor_position_read(&rotor_position_steps);
 		sprintf(msg, "Motor Position at Zero Angle: %.2f\r\n",
 				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
@@ -2302,7 +2357,7 @@ void rotor_encoder_test(void){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		ret = rotor_position_read(&rotor_position_steps);
+		ret = hardware_rotor_position_read(&rotor_position_steps);
 		sprintf(msg, "Motor Position Test to -45 Degree Angle: %.2f\r\n",
 				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
@@ -2318,7 +2373,7 @@ void rotor_encoder_test(void){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		ret = rotor_position_read(&rotor_position_steps);
+		ret = hardware_rotor_position_read(&rotor_position_steps);
 		sprintf(msg, "Motor Position Test to Zero Angle: %.2f\r\n",
 				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
@@ -2334,7 +2389,7 @@ void rotor_encoder_test(void){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		ret = rotor_position_read(&rotor_position_steps);
+		ret = hardware_rotor_position_read(&rotor_position_steps);
 		sprintf(msg, "Motor Position at 90 Degree Angle: %.2f\r\n",
 				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -2350,7 +2405,7 @@ void rotor_encoder_test(void){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		ret = rotor_position_read(&rotor_position_steps);
+		ret = hardware_rotor_position_read(&rotor_position_steps);
 		sprintf(msg, "Motor Position at Zero Angle: %.2f\r\n",
 				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
@@ -2380,7 +2435,7 @@ void rotor_encoder_test(void){
 				HAL_MAX_DELAY);
 		HAL_Delay(3000);
 
-		ret = encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
+		ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		encoder_position_down = encoder_position;
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees))\r\n\r\n",
 				(float) (encoder_position_down / angle_scale));
@@ -2396,7 +2451,7 @@ void rotor_encoder_test(void){
 				HAL_MAX_DELAY);
 		HAL_Delay(10000);
 
-		ret = encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
+		ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f\r\n(Correct value should lie between -359.5 and -360.5 degrees)\r\n\r\n",
 				(float) ((encoder_position_steps - encoder_position_down)
 						/ angle_scale));
@@ -2412,7 +2467,7 @@ void rotor_encoder_test(void){
 				HAL_MAX_DELAY);
 		HAL_Delay(10000);
 
-		ret = encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
+		ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees) \r\n\r\n",
 				(float) ((encoder_position_steps - encoder_position_down)
 						/ angle_scale));
@@ -2463,7 +2518,7 @@ void motor_actuator_characterization_mode(void){
 	 * Set Rotor Position Zero
 	 */
 
-	rotor_position_set();
+	hardware_rotor_home();
 	test_time = HAL_GetTick() - tick_cycle_start;
 
 	rotor_chirp_step_period = (int) (rotor_chirp_period * 240.0);
@@ -2685,7 +2740,7 @@ void motor_actuator_characterization_mode(void){
 			if (BSP_MotorControl_GetDeviceState(0) == INACTIVE) {
 				motor_state = 0;
 			}
-			ret = rotor_position_read(&rotor_position_steps);
+			ret = hardware_rotor_position_read(&rotor_position_steps);
 			current_speed = BSP_MotorControl_GetCurrentSpeed(0);
 			sprintf(msg,
 					"%i\t%i\t%i\t%i\t%i\t%f\t%i\t%i\t%i\t%i\t%i\r\n", i,
@@ -2798,7 +2853,7 @@ void interactive_rotor_actuator_control(void){
 			BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 			BSP_MotorControl_WaitWhileActive(0);
 
-			ret = rotor_position_read(&rotor_position_steps);
+			ret = hardware_rotor_position_read(&rotor_position_steps);
 			sprintf(msg, "\n\rMotor Position in Steps %i and Degrees %.2f\r\n",
 					rotor_position_steps, (float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);

@@ -20,6 +20,9 @@ void set_mode_strings(void);
 void user_prompt(void);
 void get_user_mode_index(char *user_string, int *char_mode_select, int *mode_index, int *mode_interactive);
 void user_configuration(void);
+int ui_process_runtime_input(int cycle_index,
+        arm_pid_instance_a_f32 *PID_Pend,
+        arm_pid_instance_a_f32 *PID_Rotor);
 
 void rotor_encoder_test(void);
 void motor_actuator_characterization_mode(void);

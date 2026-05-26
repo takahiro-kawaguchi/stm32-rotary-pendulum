@@ -99,6 +99,26 @@ void hardware_init(TIM_HandleTypeDef *htim3_handle, int encoder_init_counts);
 void hardware_sensor_read(SensorRaw *out, SwingUpSensorState *swing_up);
 
 /*
+ * Read rotor position in microstep units.
+ *
+ * @param rotor_position Output: current rotor position [steps].
+ * @return Range status (-1/0/1), consistent with legacy behavior.
+ */
+int hardware_rotor_position_read(int *rotor_position);
+
+/*
+ * Read pendulum encoder position relative to encoder_position_init.
+ *
+ * @param encoder_position       Output: current encoder position [counts].
+ * @param encoder_position_init  Reference TIM3 count captured at startup.
+ * @param htim3                  TIM3 encoder handle.
+ * @return Range status (-1/0/1), consistent with legacy behavior.
+ */
+int hardware_encoder_position_read(int *encoder_position,
+                                   int encoder_position_init,
+                                   TIM_HandleTypeDef *htim3);
+
+/*
  * Apply a control output to the motor.
  *
  * @param cmd  Acceleration command from controller_compute().

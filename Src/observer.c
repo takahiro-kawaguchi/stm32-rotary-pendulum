@@ -66,3 +66,8 @@ void observer_update(const SensorRaw   *raw,
     state->rotor_vel_filt_prev  = out->rotor_velocity_rad_s;
     state->prev_rotor_angle_rad = out->rotor_angle_rad;
 }
+
+const ObserverOps OBSERVER_OPS_DEFAULT = {
+    .init = observer_init,
+    .update = observer_update,
+};

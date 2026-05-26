@@ -51,4 +51,60 @@ void controller_compute(ControllerState     *state,
                         const ControlTarget *target,
                         ControlOutput       *out);
 
+/*
+ * ControllerDualPidInput: mode flags and signals used by the legacy dual-PID
+ * orchestration that previously lived in main.c.
+ */
+typedef struct {
+    float rotor_position_filter_steps;
+    float rotor_position_command_steps;
+    float feedforward_gain;
+    float integral_compensator_gain;
+    float load_disturbance_sensitivity_scale;
+    float sample_period_rotor_s;
+    int enable_state_feedback;
+    int enable_disturbance_rejection_step;
+    int enable_sensitivity_fnc_step;
+    int enable_noise_rejection_step;
+} ControllerDualPidInput;
+
+/*
+ * ControllerDualPidRuntime: mutable runtime values carried across cycles.
+ */
+typedef struct {
+    float current_error_rotor_steps;
+    float current_error_rotor_integral;
+} ControllerDualPidRuntime;
+
+/*
+ * Compute dual-PID command including legacy mode-dependent orchestration.
+ */
+void controller_compute_dual_pid(ControllerState              *state,
+                                 const SystemState            *sys,
+                                 ControlTarget                *target,
+                                 const ControllerDualPidInput *input,
+                                 ControllerDualPidRuntime     *runtime,
+                                 ControlOutput                *out);
+
+/*
+ * ControllerOps: pluggable controller interface.
+ * Replace these function pointers to swap controller implementation.
+ */
+typedef struct {
+    void (*init)(ControllerState *state, const PidGains *gains, float sample_period_s);
+    void (*compute)(ControllerState     *state,
+                    const SystemState   *sys,
+                    const ControlTarget *target,
+                    ControlOutput       *out);
+    void (*compute_dual)(ControllerState              *state,
+                         const SystemState            *sys,
+                         ControlTarget                *target,
+                         const ControllerDualPidInput *input,
+                         ControllerDualPidRuntime     *runtime,
+                         ControlOutput                *out);
+} ControllerOps;
+
+/* Default controller implementation (controller_init/controller_compute). */
+extern const ControllerOps CONTROLLER_OPS_DEFAULT;
+
 #endif /* CONTROLLER_H */
