@@ -7,6 +7,73 @@
 #include <math.h>
 #include <stdlib.h>
 
+/* UI-private mode selection state (moved from main.c) -------------------- */
+static int mode_1, mode_2, mode_3, mode_4, mode_5;
+static int mode_adaptive_off, mode_adaptive;
+static int mode_8, mode_9, mode_10, mode_11, mode_13, mode_15;
+static int mode_16, mode_17, mode_18, mode_19;
+static int mode_quit;
+
+static char mode_string_stop[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_1[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_2[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_3[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_4[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_8[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_5[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_accel[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_accel[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_amp[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_amp[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_single_pid[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_test[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_control[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_motor_characterization_mode[UART_RX_BUFFER_SIZE];
+static char mode_string_mode_full_sysid[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_pend_p[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_pend_p[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_pend_i[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_pend_i[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_pend_d[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_pend_d[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_rotor_p[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_rotor_p[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_rotor_i[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_rotor_i[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_rotor_d[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_rotor_d[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_torq_c[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_torq_c[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_max_s[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_max_s[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_min_s[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_min_s[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_max_a[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_max_a[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_max_d[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_max_d[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_step[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_step[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_pendulum_impulse[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_pendulum_impulse[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_load_dist[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_load_dist[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_noise_rej_step[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_noise_rej_step[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_sensitivity_fnc_step[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_sensitivity_fnc_step[UART_RX_BUFFER_SIZE];
+static char mode_string_inc_step_size[UART_RX_BUFFER_SIZE];
+static char mode_string_dec_step_size[UART_RX_BUFFER_SIZE];
+static char mode_string_select_mode_5[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_high_speed_sampling[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_high_speed_sampling[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_speed_prescale[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_speed_prescale[UART_RX_BUFFER_SIZE];
+static char mode_string_disable_speed_governor[UART_RX_BUFFER_SIZE];
+static char mode_string_enable_speed_governor[UART_RX_BUFFER_SIZE];
+static char mode_string_reset_system[UART_RX_BUFFER_SIZE];
+/* ----------------------------------------------------------------------- */
+
 void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return) {
 
 	int k;

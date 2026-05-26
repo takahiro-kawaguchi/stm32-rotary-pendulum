@@ -781,127 +781,20 @@ extern int report_mode;
 extern int speed_scale;
 extern int speed_governor;
 
-/*
- * User selection mode values
- */
-
-extern int mode_1;				// Enable LQR Motor Model M
-extern int mode_2;				// Enable LRR Motor Model H
-extern int mode_3;				// Enable LQR Motor Model L
-extern int mode_4;				// Enable Suspended Mode Motor Model M
-extern int mode_5;				// Enable sin drive track signal
-extern int mode_adaptive_off;	// Disable adaptive control
-extern int mode_adaptive;		// Enable adaptive control
-extern int mode_8;				// Enable custom configuration entry
-extern int mode_9;				// Disable sin drive track signal
-extern int mode_10;			// Enable Single PID Mode with Motor Model M
-extern int mode_11;			// Enable rotor actuator and encoder test mode
-extern int mode_13;			// Enable rotor control system evaluation
-extern int mode_15;			// Enable interactive control of rotor actuator
-extern int mode_16;			// Enable load disturbance function step mode
-extern int mode_17;			// Enable noise disturbance function step mode
-extern int mode_18;			// Enable sensitivity function step mode
-extern int mode_19;            // Enable full system identification mode
-extern int mode_quit;			// Initiate exit from control loop
 extern int mode_interactive;	// Enable continued terminal interactive user session
+/* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → ui.c (static) */
 extern int mode_index_prev, mode_index_command;
 extern int mode_transition_tick;
 extern int mode_transition_state;
 extern int transition_to_adaptive_mode;
 
 
-/*
- * Real time user input characters
- */
-
-extern char mode_string_stop[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_1[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_2[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_3[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_4[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_8[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_5[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_accel[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_accel[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_amp[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_amp[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_single_pid[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_test[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_control[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_motor_characterization_mode[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_load_dist[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_load_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_noise_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_plant_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_full_sysid[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_pend_p[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_pend_p[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_pend_i[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_pend_i[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_pend_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_pend_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_rotor_p[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_rotor_p[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_rotor_i[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_rotor_i[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_rotor_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_rotor_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_torq_c[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_torq_c[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_max_s[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_max_s[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_min_s[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_min_s[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_max_a[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_max_a[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_max_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_max_d[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_pendulum_impulse[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_pendulum_impulse[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_load_dist[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_load_dist[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_noise_rej_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_noise_rej_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_sensitivity_fnc_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_sensitivity_fnc_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_step_size[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_step_size[UART_RX_BUFFER_SIZE];
-extern char mode_string_select_mode_5[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_high_speed_sampling[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_high_speed_sampling[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_speed_prescale[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_speed_prescale[UART_RX_BUFFER_SIZE];
-extern char mode_string_disable_speed_governor[UART_RX_BUFFER_SIZE];
-extern char mode_string_enable_speed_governor[UART_RX_BUFFER_SIZE];
-extern char mode_string_reset_system[UART_RX_BUFFER_SIZE];
-
-
 extern int char_mode_select;	// Flag detecting whether character mode select entered
 
 
 extern char message_received[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_1[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_2[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_3[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_4[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_5[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_8[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_single_pid[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_test[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_control[UART_RX_BUFFER_SIZE];
 extern char mode_string_mode_high_speed_test[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_motor_characterization_mode[UART_RX_BUFFER_SIZE];
 extern char mode_string_mode_pendulum_sysid_test[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_accel[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_accel[UART_RX_BUFFER_SIZE];
-extern char mode_string_inc_amp[UART_RX_BUFFER_SIZE];
-extern char mode_string_dec_amp[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_load_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_noise_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_mode_plant_dist_step[UART_RX_BUFFER_SIZE];
-extern char mode_string_stop[UART_RX_BUFFER_SIZE];
 
 /* CMSIS Variables */
 extern arm_pid_instance_a_f32 PID_Pend, PID_Rotor;
