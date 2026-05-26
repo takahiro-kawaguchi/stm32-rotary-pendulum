@@ -1353,14 +1353,7 @@ int main(void) {
 		ctl_state.PID_Rotor.int_term = 0;
 		ctl_state.PID_Rotor.control_output = 0;
 
-		/* Initialize Pendulum PID control state */
-		pid_filter_control_execute(&ctl_state.PID_Pend, current_error_steps, sample_period,
-				 ctl_state.Deriv_Filt_Pend);
-
-		/* Initialize Rotor PID control state */
-		*current_error_rotor_steps = 0;
-		pid_filter_control_execute(&ctl_state.PID_Rotor, current_error_rotor_steps,
-				sample_period_rotor, ctl_state.Deriv_Filt_Rotor);
+		/* Pendulum and Rotor PID state already zeroed above */
 
 		/* Initialize control system variables */
 
@@ -2829,37 +2822,7 @@ void Error_Handler(uint16_t error) {
  ******************************************************************************
  */
 
-/*
- * PID Controller with low pass filter operating on derivative component
- */
-
-__INLINE void pid_filter_control_execute(arm_pid_instance_a_f32 *PID, float * current_error,
-		float * sample_period, float * Deriv_Filt) {
-
-		float int_term, diff, diff_filt;
-
-	  /* Compute time integral of error by trapezoidal rule */
-	  int_term = PID->Ki*(*sample_period)*((*current_error) + PID->state_a[0])/2;
-
-	  /* Compute time derivative of error */
-	  diff = PID->Kd*((*current_error) - PID->state_a[0])/(*sample_period);
-
-	  /* Compute first order low pass filter of time derivative */
-	  diff_filt = Deriv_Filt[0] * diff
-				+ Deriv_Filt[0] * PID->state_a[2]
-				- Deriv_Filt[1] * PID->state_a[3];
-
-	  /* Accumulate PID output with Integral, Derivative and Proportional contributions*/
-
-	  PID->control_output = diff_filt + int_term + PID->Kp*(*current_error);
-
-	  /* Update state variables */
-	  PID->state_a[1] = PID->state_a[0];
-	  PID->state_a[0] = *current_error;
-	  PID->state_a[2] = diff;
-	  PID->state_a[3] = diff_filt;
-	  PID->int_term = int_term;
-}
+/* pid_filter_control_execute → moved to controller.c as static pid_execute */
 
 /* encoder_position_read, oppositeSigns, rotor_position_set, rotor_position_read
    → moved to hardware.c */
