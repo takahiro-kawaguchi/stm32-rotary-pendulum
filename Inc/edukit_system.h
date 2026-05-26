@@ -768,33 +768,6 @@ extern int char_mode_select;	// Flag detecting whether character mode select ent
 /* message_received → never referenced, removed */
 /* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
-/* CMSIS Variables */
-extern arm_pid_instance_a_f32 PID_Pend, PID_Rotor;
-extern float Deriv_Filt_Pend[2];
-extern float Deriv_Filt_Rotor[2];
-extern float Wo_t, fo_t, IWon_t;
-
-/* System timing variables */
-
-extern uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
-       tick_read_cycle, tick_read_cycle_start,tick_wait_start,tick_wait;
-
-extern volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, target_cpu_cycle, prev_target_cpu_cycle;
-extern volatile int current_cpu_cycle_delay_relative_report;
-
-extern uint32_t t_sample_cpu_cycles;
-extern float Tsample, Tsample_rotor;
-/* test_time → write-only, removed */
-extern float angle_scale;
-extern int enable_high_speed_sampling;
-
-/* Reset state tracking */
-extern int reset_state;
-
-/* Motor configuration */
-extern uint16_t min_speed, max_speed, max_accel, max_decel;
-
-/* Serial interface variables */
-extern uint32_t RxBuffer_ReadIdx;
-extern uint32_t RxBuffer_WriteIdx;
-extern uint32_t readBytes;
+/* CMSIS Variables: PID_Pend, PID_Rotor, Deriv_Filt_Pend, Deriv_Filt_Rotor, Wo_t, fo_t, IWon_t
+   are ControllerState/ObserverState struct fields; no global definitions existed.
+   Dangling extern declarations removed. Duplicate system timing section removed. */
