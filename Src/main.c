@@ -232,8 +232,7 @@ float rotor_control_target_steps;
 float rotor_control_target_steps_curr;
 
 /* Control system variables */
-int rotor_position_delta;
-int initial_rotor_position;
+/* rotor_position_delta, initial_rotor_position → never referenced, removed */
 int cycle_count;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
@@ -278,11 +277,11 @@ float rotor_position_command_deg;
 float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
 float rotor_position_diff, rotor_position_diff_prev;
 float rotor_position_diff_filter, rotor_position_diff_filter_prev;
-int rotor_target_in_steps;
+/* rotor_target_in_steps → never referenced, removed */
 
 /* Rotor Plant Design variables */
 int select_rotor_plant_design, enable_rotor_plant_design, enable_rotor_plant_gain_design;
-int rotor_control_target_steps_int;
+/* rotor_control_target_steps_int → never referenced, removed */
 float rotor_damping_coefficient, rotor_natural_frequency;
 float rotor_plant_gain;
 float c0, c1, c2, c3, c4, ao, Wn2;

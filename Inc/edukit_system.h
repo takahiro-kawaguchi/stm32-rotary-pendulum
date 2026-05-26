@@ -549,11 +549,10 @@ extern uint32_t readBytes;
 /* Control system output signal */
 extern float rotor_control_target_steps;
 extern float rotor_control_target_steps_curr;
-extern float rotor_control_target_steps_prev;
+/* rotor_control_target_steps_prev → CommandShaperState field, no global (dangling extern removed) */
 
 /* Control system variables */
-extern int rotor_position_delta;
-extern int initial_rotor_position;
+/* rotor_position_delta, initial_rotor_position → never referenced, removed */
 extern int cycle_count;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
@@ -593,17 +592,15 @@ extern float rotor_position_command_deg;
 extern float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
 extern float rotor_position_diff, rotor_position_diff_prev;
 extern float rotor_position_diff_filter, rotor_position_diff_filter_prev;
-extern int rotor_target_in_steps;
-extern int initial_rotor_position;
+/* rotor_target_in_steps, initial_rotor_position → never referenced, removed */
 
 /* Rotor Plant Design variables */
 extern int select_rotor_plant_design, enable_rotor_plant_design, enable_rotor_plant_gain_design;
-extern int rotor_control_target_steps_int;
+/* rotor_control_target_steps_int → never referenced, removed */
 extern float rotor_damping_coefficient, rotor_natural_frequency;
 extern float rotor_plant_gain;
-extern float rotor_control_target_steps_gain;
-extern float rotor_control_target_steps_filter_2, rotor_control_target_steps_filter_prev_2;
-extern float rotor_control_target_steps_prev_prev, rotor_control_target_steps_filter_prev_prev_2;
+/* rotor_control_target_steps_gain/filter_2/filter_prev_2/prev_prev/filter_prev_prev_2
+   → CommandShaperState fields, no globals (dangling externs removed) */
 extern float c0, c1, c2, c3, c4, ao, Wn2;
 extern float fo_r, Wo_r, IWon_r, iir_0_r, iir_1_r, iir_2_r;
 
