@@ -519,7 +519,7 @@ extern float target_velocity_prescaled;
 /* System data reporting */
 extern char tmp_string[256];
 extern char msg[192];
-extern char msg_pad[64];
+/* msg_pad → never referenced, removed */
 extern char test_msg[128];
 
 /* System timing variables */
@@ -531,7 +531,8 @@ extern volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, targ
 extern volatile int current_cpu_cycle_delay_relative_report;
 
 extern uint32_t t_sample_cpu_cycles;
-extern float Tsample, Tsample_rotor, test_time;
+extern float Tsample, Tsample_rotor;
+/* test_time → write-only, removed */
 extern float angle_scale;
 extern int enable_high_speed_sampling;
 
@@ -588,7 +589,7 @@ extern float reference_tracking_command;
 extern int rotor_position_steps;
 extern float rotor_position_command_steps;
 extern float rotor_position_command_steps_pf, rotor_position_command_steps_pf_prev;
-extern float rotor_position_command_deg;
+/* rotor_position_command_deg → ui.c static */
 extern float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
 extern float rotor_position_diff, rotor_position_diff_prev;
 extern float rotor_position_diff_filter, rotor_position_diff_filter_prev;
@@ -764,7 +765,7 @@ extern int transition_to_adaptive_mode;
 extern int char_mode_select;	// Flag detecting whether character mode select entered
 
 
-extern char message_received[UART_RX_BUFFER_SIZE];
+/* message_received → never referenced, removed */
 /* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
 /* CMSIS Variables */
@@ -782,7 +783,8 @@ extern volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, targ
 extern volatile int current_cpu_cycle_delay_relative_report;
 
 extern uint32_t t_sample_cpu_cycles;
-extern float Tsample, Tsample_rotor, test_time;
+extern float Tsample, Tsample_rotor;
+/* test_time → write-only, removed */
 extern float angle_scale;
 extern int enable_high_speed_sampling;
 

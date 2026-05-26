@@ -212,7 +212,7 @@ uint8_t RxBuffer[UART_RX_BUFFER_SIZE];
 /* System data reporting */
 char tmp_string[256];
 char msg[192];
-char msg_pad[64];
+/* msg_pad → never referenced, removed */
 char test_msg[128];
 
 /*
@@ -273,7 +273,7 @@ float reference_tracking_command;
 int rotor_position_steps;
 float rotor_position_command_steps;
 float rotor_position_command_steps_pf, rotor_position_command_steps_pf_prev;
-float rotor_position_command_deg;
+/* rotor_position_command_deg → ui.c static */
 float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
 float rotor_position_diff, rotor_position_diff_prev;
 float rotor_position_diff_filter, rotor_position_diff_filter_prev;
@@ -439,7 +439,7 @@ int transition_to_adaptive_mode;
 int char_mode_select;	// Flag detecting whether character mode select entered
 
 
-char message_received[UART_RX_BUFFER_SIZE];
+/* message_received → never referenced, removed */
 /* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
 /* System timing variables */
@@ -451,7 +451,8 @@ volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, target_cpu_
 volatile int current_cpu_cycle_delay_relative_report;
 
 uint32_t t_sample_cpu_cycles;
-float Tsample, Tsample_rotor, test_time;
+float Tsample, Tsample_rotor;
+/* test_time → write-only (never read), removed */
 float angle_scale;
 int enable_high_speed_sampling;
 

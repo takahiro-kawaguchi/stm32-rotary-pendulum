@@ -77,6 +77,7 @@ static char mode_string_reset_system[UART_RX_BUFFER_SIZE];
 static int mode_index_command;
 static int enable_angle_cal_resp;
 static int enable_swing_up_resp;
+static float rotor_position_command_deg;
 
 /* Rotor high-speed test / sysid / motor characterization variables (moved from main.c) */
 static int rotor_test_speed_min, rotor_test_speed_max;
@@ -2603,7 +2604,7 @@ void motor_actuator_characterization_mode(void){
 	 */
 
 	hardware_rotor_home();
-	test_time = HAL_GetTick() - tick_cycle_start;
+	/* test_time was write-only, removed */
 
 	rotor_chirp_step_period = (int) (rotor_chirp_period * 240.0);
 	tick_cycle_start = HAL_GetTick();
