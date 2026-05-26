@@ -452,8 +452,7 @@ typedef struct
 
 __STATIC_INLINE void DWT_Delay_until_cycle(volatile uint32_t cycle);
 
-extern void pid_filter_control_execute(arm_pid_instance_a_f32 *PID, float * current_error,
-		float * sample_period, float * Deriv_Filt);
+/* pid_filter_control_execute → private pid_execute in controller.c */
 
 extern int encoder_position_read(int *encoder_position, int encoder_position_init, TIM_HandleTypeDef *htim3);
 extern int rotor_position_read(int *rotor_position);
