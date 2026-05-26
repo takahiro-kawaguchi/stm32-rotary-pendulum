@@ -73,13 +73,17 @@ static char mode_string_disable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_enable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_reset_system[UART_RX_BUFFER_SIZE];
 
-/* Rotor high-speed test / sysid variables (moved from main.c) ------------ */
+/* Rotor high-speed test / sysid / motor characterization variables (moved from main.c) */
 static int rotor_test_speed_min, rotor_test_speed_max;
 static int rotor_test_acceleration_max, swing_deceleration_max;
 static uint16_t current_speed;
 static int enable_pendulum_sysid_test;
 static int enable_full_sysid;
 static float full_sysid_max_freq_hz;
+static int enable_encoder_test;
+static int motor_state;
+static float rotor_chirp_amplitude;
+static int rotor_chirp_step_period;
 /* ----------------------------------------------------------------------- */
 
 void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return) {
@@ -692,7 +696,7 @@ void user_configuration(void){
 	enable_rotor_actuator_test = 0;
 	enable_rotor_actuator_control = 0;
 	enable_encoder_test = 0;
-	enable_rotor_actuator_high_speed_test = 0;
+	/* enable_rotor_actuator_high_speed_test removed (write-only, never read) */
 	enable_motor_actuator_characterization_mode = 0;
 	enable_full_sysid = 0;
 

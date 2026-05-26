@@ -341,9 +341,9 @@ float fo_s, Wo_s, IWon_s, iir_0_s, iir_1_s, iir_2_s;
 float encoder_angle_slope_corr_steps;
 
 /* Adaptive control variables */
-float adaptive_error, adaptive_threshold_low, adaptive_threshold_high;
-float error_sum_prev, error_sum, error_sum_filter_prev, error_sum_filter;
-int adaptive_entry_tick, adaptive_dwell_period;
+/* adaptive_error, adaptive_threshold_low/high, error_sum_prev, error_sum,
+   error_sum_filter_prev, error_sum_filter, adaptive_entry_tick,
+   adaptive_dwell_period → removed (write-only, never read) */
 int enable_adaptive_mode, adaptive_state, adaptive_state_change;
 
 /* Rotor impulse variables */
@@ -351,16 +351,13 @@ int rotor_position_step_polarity;
 int impulse_start_index;
 
 /* User configuration variables */
-int clear_input;
+/* clear_input, max_speed_read, min_speed_read, motor_response_model,
+   enable_rotor_actuator_high_speed_test → removed (never referenced) */
+/* enable_encoder_test, motor_state → ui.c static */
 uint32_t enable_control_action;
-int max_speed_read, min_speed_read;
 int select_suspended_mode;
-int motor_response_model;
 int enable_rotor_actuator_test, enable_rotor_actuator_control;
-int enable_encoder_test;
-int enable_rotor_actuator_high_speed_test;
 int enable_motor_actuator_characterization_mode;
-int motor_state;
 float torq_current_val;
 
 
@@ -373,8 +370,7 @@ float rotor_chirp_start_freq;
 float rotor_chirp_end_freq;
 float rotor_chirp_period ;
 float rotor_chirp_frequency;
-float rotor_chirp_amplitude;
-int rotor_chirp_step_period;
+/* rotor_chirp_amplitude, rotor_chirp_step_period → ui.c static */
 
 float pendulum_position_command_steps;
 
@@ -418,14 +414,14 @@ float rotor_track_comb_amplitude;
 /* Sensitivity function system variables */
 int enable_disturbance_rejection_step;
 int enable_noise_rejection_step;
-int enable_plant_rejection_step;
+/* enable_plant_rejection_step → removed (never referenced) */
 int enable_sensitivity_fnc_step;
 float load_disturbance_sensitivity_scale;
 
 /* Noise rejection sensitivity function low pass filter */
-
-float noise_rej_signal_filter, noise_rej_signal;
-float noise_rej_signal_prev, noise_rej_signal_filter_prev;
+/* noise_rej_signal_filter, noise_rej_signal_prev, noise_rej_signal_filter_prev
+   → removed (write-only, never read) */
+float noise_rej_signal;
 
 /*
  * Real time user input system variables

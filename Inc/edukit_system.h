@@ -652,9 +652,9 @@ extern float fo_s, Wo_s, IWon_s, iir_0_s, iir_1_s, iir_2_s;
 extern float encoder_angle_slope_corr_steps;
 
 /* Adaptive control variables */
-extern float adaptive_error, adaptive_threshold_low, adaptive_threshold_high;
-extern float error_sum_prev, error_sum, error_sum_filter_prev, error_sum_filter;
-extern int adaptive_entry_tick, adaptive_dwell_period;
+/* adaptive_error, adaptive_threshold_low/high → write-only, removed */
+/* error_sum_prev/filter_prev, error_sum, error_sum_filter → write-only, removed */
+/* adaptive_entry_tick, adaptive_dwell_period → write-only, removed */
 extern int enable_adaptive_mode, adaptive_state, adaptive_state_change;
 extern float rotor_position_command_steps_prev;
 
@@ -663,16 +663,16 @@ extern int rotor_position_step_polarity;
 extern int impulse_start_index;
 
 /* User configuration variables */
-extern int clear_input;
+/* clear_input → unreferenced, removed */
 extern uint32_t enable_control_action;
-extern int max_speed_read, min_speed_read;
+/* max_speed_read, min_speed_read → unreferenced, removed */
 extern int select_suspended_mode;
-extern int motor_response_model;
+/* motor_response_model → unreferenced, removed */
 extern int enable_rotor_actuator_test, enable_rotor_actuator_control;
-extern int enable_encoder_test;
-extern int enable_rotor_actuator_high_speed_test;
+/* enable_encoder_test → ui.c static */
+/* enable_rotor_actuator_high_speed_test → write-only, removed */
 extern int enable_motor_actuator_characterization_mode;
-extern int motor_state;
+/* motor_state → ui.c static */
 extern float torq_current_val;
 
 
@@ -685,8 +685,7 @@ extern float rotor_chirp_start_freq;
 extern float rotor_chirp_end_freq;
 extern float rotor_chirp_period ;
 extern float rotor_chirp_frequency;
-extern float rotor_chirp_amplitude;
-extern int rotor_chirp_step_period;
+/* rotor_chirp_amplitude, rotor_chirp_step_period → ui.c static */
 
 extern float pendulum_position_command_steps;
 
@@ -730,7 +729,7 @@ extern float rotor_track_comb_amplitude;
 /* Sensitivity function system variables */
 extern int enable_disturbance_rejection_step;
 extern int enable_noise_rejection_step;
-extern int enable_plant_rejection_step;
+/* enable_plant_rejection_step → unreferenced, removed */
 extern int enable_sensitivity_fnc_step;
 extern float load_disturbance_sensitivity_scale;
 
@@ -738,8 +737,8 @@ extern float load_disturbance_sensitivity_scale;
 
 /* Noise rejection sensitivity function low pass filter */
 
-extern float noise_rej_signal_filter, noise_rej_signal;
-extern float noise_rej_signal_prev, noise_rej_signal_filter_prev;
+/* noise_rej_signal_filter, _prev, _filter_prev → write-only, removed */
+extern float noise_rej_signal;
 
 /*
  * Real time user input system variables

@@ -158,9 +158,6 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	enable_adaptive_mode = ENABLE_ADAPTIVE_MODE;
-	adaptive_threshold_low = ADAPTIVE_THRESHOLD_LOW;
-	adaptive_threshold_high = ADAPTIVE_THRESHOLD_HIGH;
 	adaptive_state = ADAPTIVE_STATE;
 	adaptive_state_change = 0;
-	adaptive_dwell_period = ADAPTIVE_DWELL_PERIOD;
 }

@@ -192,15 +192,11 @@ void app_run_control_session(AppControlContext *ctx)
 	impulse_start_index = 0;
 	mode_transition_state = 0;
 	transition_to_adaptive_mode = 0;
-	error_sum_prev = 0;
-	error_sum_filter_prev = 0;
 	adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
 	rotor_position_command_steps_pf_prev = 0;
 	enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
 	rotor_track_comb_command = 0;
-	noise_rej_signal_prev = 0;
-	noise_rej_signal_filter_prev = 0;
 	full_sysid_start_index = -1;
 	current_cpu_cycle = 0;
 	speed_scale = DATA_REPORT_SPEED_SCALE;
