@@ -136,6 +136,8 @@
 #include "main.h"
 #include "edukit_system.h"
 #include "hardware.h"
+#include "observer.h"
+#include "controller.h"
 #include "ui.h"
 #include <stdio.h>
 #include <string.h>
@@ -242,6 +244,15 @@ char test_msg[128];
  */
 
 TIM_HandleTypeDef htim3;
+
+/* Step 5: observer/hardware/controller bridge variables */
+SensorRaw     hw_raw;
+SensorCalib   hw_cal;
+ObserverState obs_state;
+SystemState   sys_state;
+ControllerState ctl_state;
+ControlTarget   ctl_target;
+ControlOutput   ctl_out;
 
 /*
   * Timer 3, UART Transmit, and UART DMA Receive declarations
@@ -603,10 +614,7 @@ char mode_string_mode_noise_dist_step[UART_RX_BUFFER_SIZE];
 char mode_string_mode_plant_dist_step[UART_RX_BUFFER_SIZE];
 char mode_string_stop[UART_RX_BUFFER_SIZE];
 
-/* CMSIS Variables */
-arm_pid_instance_a_f32 PID_Pend, PID_Rotor;
-float Deriv_Filt_Pend[2];
-float Deriv_Filt_Rotor[2];
+/* CMSIS Variables (PID state now in ctl_state) */
 float Wo_t, fo_t, IWon_t;
 
 /* System timing variables */
@@ -875,20 +883,21 @@ int main(void) {
 	*sample_period = Tsample;
 	Tsample_rotor = Tsample;
 	*sample_period_rotor = Tsample_rotor;
+	ctl_state.sample_period_s = Tsample;
 
 	/* PID Derivative Low Pass Filter Coefficients */
 
 	fo_t = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY;
 	Wo_t = 2 * 3.141592654 * fo_t;
 	IWon_t = 2 / (Wo_t * (*sample_period));
-	Deriv_Filt_Pend[0] = 1 / (1 + IWon_t);
-	Deriv_Filt_Pend[1] = Deriv_Filt_Pend[0] * (1 - IWon_t);
+	ctl_state.Deriv_Filt_Pend[0] = 1 / (1 + IWon_t);
+	ctl_state.Deriv_Filt_Pend[1] = ctl_state.Deriv_Filt_Pend[0] * (1 - IWon_t);
 
 	fo_t = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY_ROTOR;
 	Wo_t = 2 * 3.141592654 * fo_t;
 	IWon_t = 2 / (Wo_t * (*sample_period));
-	Deriv_Filt_Rotor[0] = 1 / (1 + IWon_t);
-	Deriv_Filt_Rotor[1] = Deriv_Filt_Rotor[0] * (1 - IWon_t);
+	ctl_state.Deriv_Filt_Rotor[0] = 1 / (1 + IWon_t);
+	ctl_state.Deriv_Filt_Rotor[1] = ctl_state.Deriv_Filt_Rotor[0] * (1 - IWon_t);
 
 	/* Initialize real time clock */
 	assert(RCC_SYS_CLOCK_FREQ == HAL_RCC_GetSysClockFreq());
@@ -1041,31 +1050,31 @@ int main(void) {
 		 */
 
 
-		PID_Pend.Kp = proportional * CONTROLLER_GAIN_SCALE;
-		PID_Pend.Ki = integral * CONTROLLER_GAIN_SCALE;
-		PID_Pend.Kd = derivative * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Kp = proportional * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Ki = integral * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Kd = derivative * CONTROLLER_GAIN_SCALE;
 
-		PID_Rotor.Kp = rotor_p_gain * CONTROLLER_GAIN_SCALE;
-		PID_Rotor.Ki = rotor_i_gain * CONTROLLER_GAIN_SCALE;
-		PID_Rotor.Kd = rotor_d_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Kp = rotor_p_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Ki = rotor_i_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Kd = rotor_d_gain * CONTROLLER_GAIN_SCALE;
 
-		PID_Pend.Kp = proportional * CONTROLLER_GAIN_SCALE;
-		PID_Pend.Ki = integral * CONTROLLER_GAIN_SCALE;
-		PID_Pend.Kd = derivative * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Kp = proportional * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Ki = integral * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Pend.Kd = derivative * CONTROLLER_GAIN_SCALE;
 
-		PID_Rotor.Kp = rotor_p_gain * CONTROLLER_GAIN_SCALE;
-		PID_Rotor.Ki = rotor_i_gain * CONTROLLER_GAIN_SCALE;
-		PID_Rotor.Kd = rotor_d_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Kp = rotor_p_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Ki = rotor_i_gain * CONTROLLER_GAIN_SCALE;
+		ctl_state.PID_Rotor.Kd = rotor_d_gain * CONTROLLER_GAIN_SCALE;
 
-		PID_Pend.state_a[0] = 0;
-		PID_Pend.state_a[1] = 0;
-		PID_Pend.state_a[2] = 0;
-		PID_Pend.state_a[3] = 0;
+		ctl_state.PID_Pend.state_a[0] = 0;
+		ctl_state.PID_Pend.state_a[1] = 0;
+		ctl_state.PID_Pend.state_a[2] = 0;
+		ctl_state.PID_Pend.state_a[3] = 0;
 
-		PID_Rotor.state_a[0] = 0;
-		PID_Rotor.state_a[1] = 0;
-		PID_Rotor.state_a[2] = 0;
-		PID_Rotor.state_a[3] = 0;
+		ctl_state.PID_Rotor.state_a[0] = 0;
+		ctl_state.PID_Rotor.state_a[1] = 0;
+		ctl_state.PID_Rotor.state_a[2] = 0;
+		ctl_state.PID_Rotor.state_a[3] = 0;
 
 		integral_compensator_gain = integral_compensator_gain * CONTROLLER_GAIN_SCALE;
 
@@ -1331,27 +1340,27 @@ int main(void) {
 
 		*current_error_steps = 0;
 		*current_error_rotor_steps = 0;
-		PID_Pend.state_a[0] = 0;
-		PID_Pend.state_a[1] = 0;
-		PID_Pend.state_a[2] = 0;
-		PID_Pend.state_a[3] = 0;
-		PID_Pend.int_term = 0;
-		PID_Pend.control_output = 0;
-		PID_Rotor.state_a[0] = 0;
-		PID_Rotor.state_a[1] = 0;
-		PID_Rotor.state_a[2] = 0;
-		PID_Rotor.state_a[3] = 0;
-		PID_Rotor.int_term = 0;
-		PID_Rotor.control_output = 0;
+		ctl_state.PID_Pend.state_a[0] = 0;
+		ctl_state.PID_Pend.state_a[1] = 0;
+		ctl_state.PID_Pend.state_a[2] = 0;
+		ctl_state.PID_Pend.state_a[3] = 0;
+		ctl_state.PID_Pend.int_term = 0;
+		ctl_state.PID_Pend.control_output = 0;
+		ctl_state.PID_Rotor.state_a[0] = 0;
+		ctl_state.PID_Rotor.state_a[1] = 0;
+		ctl_state.PID_Rotor.state_a[2] = 0;
+		ctl_state.PID_Rotor.state_a[3] = 0;
+		ctl_state.PID_Rotor.int_term = 0;
+		ctl_state.PID_Rotor.control_output = 0;
 
 		/* Initialize Pendulum PID control state */
-		pid_filter_control_execute(&PID_Pend, current_error_steps, sample_period,
-				 Deriv_Filt_Pend);
+		pid_filter_control_execute(&ctl_state.PID_Pend, current_error_steps, sample_period,
+				 ctl_state.Deriv_Filt_Pend);
 
 		/* Initialize Rotor PID control state */
 		*current_error_rotor_steps = 0;
-		pid_filter_control_execute(&PID_Rotor, current_error_rotor_steps,
-				sample_period_rotor, Deriv_Filt_Rotor);
+		pid_filter_control_execute(&ctl_state.PID_Rotor, current_error_rotor_steps,
+				sample_period_rotor, ctl_state.Deriv_Filt_Rotor);
 
 		/* Initialize control system variables */
 
@@ -1417,12 +1426,12 @@ int main(void) {
 		 * completion
 		 */
 
-		init_r_p_gain = PID_Rotor.Kp;
-		init_r_i_gain = PID_Rotor.Ki;
-		init_r_d_gain = PID_Rotor.Kd;
-		init_p_p_gain = PID_Pend.Kp;
-		init_p_i_gain = PID_Pend.Ki;
-		init_p_d_gain = PID_Pend.Kd;
+		init_r_p_gain = ctl_state.PID_Rotor.Kp;
+		init_r_i_gain = ctl_state.PID_Rotor.Ki;
+		init_r_d_gain = ctl_state.PID_Rotor.Kd;
+		init_p_p_gain = ctl_state.PID_Pend.Kp;
+		init_p_i_gain = ctl_state.PID_Pend.Ki;
+		init_p_d_gain = ctl_state.PID_Pend.Kd;
 		init_enable_state_feedback = enable_state_feedback;
 		init_integral_compensator_gain = integral_compensator_gain;
 		init_feedforward_gain = feedforward_gain;
@@ -1457,12 +1466,12 @@ int main(void) {
 			 * Swing Up
 			 */
 
-			PID_Rotor.Kp = 20;
-			PID_Rotor.Ki = 10;
-			PID_Rotor.Kd = 10;
-			PID_Pend.Kp = 300;
-			PID_Pend.Ki = 0.0;
-			PID_Pend.Kd = 30.0;
+			ctl_state.PID_Rotor.Kp = 20;
+			ctl_state.PID_Rotor.Ki = 10;
+			ctl_state.PID_Rotor.Kd = 10;
+			ctl_state.PID_Pend.Kp = 300;
+			ctl_state.PID_Pend.Ki = 0.0;
+			ctl_state.PID_Pend.Kd = 30.0;
 			enable_state_feedback = 0;
 			integral_compensator_gain = 0;
 			feedforward_gain = 1;
@@ -1596,6 +1605,10 @@ int main(void) {
 			encoder_position = encoder_position - encoder_position_offset;
 		}
 
+		/* Step 5: initialize hardware layer and observer for this control run */
+		hardware_init(&htim3, encoder_position_init);
+		observer_init(&obs_state, Tsample);
+
 		while (enable_control_action == 1) {
 
 
@@ -1607,12 +1620,12 @@ int main(void) {
 			 */
 
 			if (enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && enable_angle_cal == 0){
-				PID_Rotor.Kp = init_r_p_gain;
-				PID_Rotor.Ki = init_r_i_gain;
-				PID_Rotor.Kd = init_r_d_gain;
-				PID_Pend.Kp = init_p_p_gain;
-				PID_Pend.Ki = init_p_i_gain;
-				PID_Pend.Kd = init_p_d_gain;
+				ctl_state.PID_Rotor.Kp = init_r_p_gain;
+				ctl_state.PID_Rotor.Ki = init_r_i_gain;
+				ctl_state.PID_Rotor.Kd = init_r_d_gain;
+				ctl_state.PID_Pend.Kp = init_p_p_gain;
+				ctl_state.PID_Pend.Ki = init_p_i_gain;
+				ctl_state.PID_Pend.Kd = init_p_d_gain;
 				enable_state_feedback = init_enable_state_feedback;
 				integral_compensator_gain = init_integral_compensator_gain;
 				feedforward_gain = init_feedforward_gain;
@@ -1647,7 +1660,7 @@ int main(void) {
 				mode_transition_state = 1;
 				/* Determine user input */
 				mode_index_command = mode_index_identification((char *)Msg.Data, config_command, & adjust_increment,
-						&PID_Pend, &PID_Rotor);
+						&ctl_state.PID_Pend, &ctl_state.PID_Rotor);
 				strcpy(config_message, (char *) Msg.Data);
 				if (strcmp(config_message, ">") == 0){
 					// Logging was activated from the Real-Time Workbench
@@ -1668,21 +1681,21 @@ int main(void) {
 				mode_index = 1;
 				mode_transition_state = 0;
 				mode_index_command = 0;
-				assign_mode_1(&PID_Pend, &PID_Rotor);
+				assign_mode_1(&ctl_state.PID_Pend, &ctl_state.PID_Rotor);
 			}
 			/* Set mode 3 if user request detected */
 			if (mode_index_command == 2 && mode_transition_state == 1) {
 				mode_index = 2;
 				mode_transition_state = 0;
 				mode_index_command = 0;
-				assign_mode_2(&PID_Pend, &PID_Rotor);
+				assign_mode_2(&ctl_state.PID_Pend, &ctl_state.PID_Rotor);
 			}
 			/* Set mode 3 if user request detected */
 			if (mode_index_command == 3 && mode_transition_state == 1) {
 				mode_index = 3;
 				mode_transition_state = 0;
 				mode_index_command = 0;
-				assign_mode_3(&PID_Pend, &PID_Rotor);
+				assign_mode_3(&ctl_state.PID_Pend, &ctl_state.PID_Rotor);
 			}
 			/* End of Real time user configuration and mode assignment read loop */
 
@@ -1705,8 +1718,8 @@ int main(void) {
 			 * Optional Reset and clear integrator error during initial start of controllers
 			 */
 			if (i < 1){
-				PID_Pend.int_term = 0;
-				PID_Rotor.int_term = 0;
+				ctl_state.PID_Pend.int_term = 0;
+				ctl_state.PID_Rotor.int_term = 0;
 			}
 
 			/*
@@ -1720,15 +1733,14 @@ int main(void) {
 			 * Angle Calibration system
 			 */
 
-			ret = encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
-			if (select_suspended_mode == 0) {
-				encoder_position = encoder_position_steps - encoder_position_down - (int)(180 * angle_scale);
-				encoder_position = encoder_position - encoder_position_offset;
-			}
-			if (select_suspended_mode == 1) {
-				encoder_position = encoder_position_steps - encoder_position_down;
-				encoder_position = encoder_position - encoder_position_offset;
-			}
+			hw_cal.encoder_down_counts   = encoder_position_down;
+			hw_cal.encoder_offset_counts = (float)encoder_position_offset;
+			hw_cal.select_suspended_mode = select_suspended_mode;
+			hardware_sensor_read(&hw_raw, NULL);
+			observer_update(&hw_raw, &hw_cal, &obs_state, &sys_state);
+			encoder_position_steps = hw_raw.encoder_counts;
+			encoder_position       = (int)(sys_state.pendulum_angle_rad / ENCODER_RAD_PER_COUNT);
+			ret = 0;
 
 			/*  Detect pendulum position excursion exceeding limits and exit */
 
@@ -1855,14 +1867,15 @@ int main(void) {
 
 			*current_error_steps = *current_error_steps + pendulum_position_command_steps;
 
-			pid_filter_control_execute(&PID_Pend,current_error_steps, sample_period, Deriv_Filt_Pend);
-
-			rotor_control_target_steps = PID_Pend.control_output;
+			/* Set controller target; pendulum PID runs inside controller_compute() below */
+			ctl_target.slope_correction_steps = encoder_angle_slope_corr_steps;
+			ctl_target.pendulum_cmd_steps     = pendulum_position_command_steps;
+			ctl_target.pendulum_angle_ref_rad = 0.0f;
 
 			/* Acquire rotor position and compute low pass filtered rotor position */
 
 
-			ret = rotor_position_read(&rotor_position_steps);
+			rotor_position_steps = hw_raw.rotor_steps;
 
 			/* Optional rotor position filter */
 
@@ -2083,12 +2096,12 @@ int main(void) {
 				 */
 
 				if (i == 1 && select_suspended_mode == 0){
-					PID_Rotor.Kp = 21.1;
-					PID_Rotor.Ki = 0;
-					PID_Rotor.Kd = 17.2;
-					PID_Pend.Kp = 419;
-					PID_Pend.Ki = 0.0;
-					PID_Pend.Kd = 56;
+					ctl_state.PID_Rotor.Kp = 21.1;
+					ctl_state.PID_Rotor.Ki = 0;
+					ctl_state.PID_Rotor.Kd = 17.2;
+					ctl_state.PID_Pend.Kp = 419;
+					ctl_state.PID_Pend.Ki = 0.0;
+					ctl_state.PID_Pend.Kd = 56;
 					enable_state_feedback = 1;
 					integral_compensator_gain = 10;
 					feedforward_gain = 1;
@@ -2097,12 +2110,12 @@ int main(void) {
 				}
 
 				if (i == 1 && select_suspended_mode == 1){
-					PID_Rotor.Kp = -23.86;
-					PID_Rotor.Ki = 0;
-					PID_Rotor.Kd = -19.2;
-					PID_Pend.Kp = -293.2;
-					PID_Pend.Ki = 0.0;
-					PID_Pend.Kd = -41.4;
+					ctl_state.PID_Rotor.Kp = -23.86;
+					ctl_state.PID_Rotor.Ki = 0;
+					ctl_state.PID_Rotor.Kd = -19.2;
+					ctl_state.PID_Pend.Kp = -293.2;
+					ctl_state.PID_Pend.Ki = 0.0;
+					ctl_state.PID_Pend.Kd = -41.4;
 					enable_state_feedback = 1;
 					integral_compensator_gain = -11.45;
 					feedforward_gain = 1;
@@ -2205,12 +2218,12 @@ int main(void) {
 
 			/* Restore user selected system state configuration */
 			if (offset_end_state == 1 && (enable_angle_cal == 1) && i == angle_cal_complete + 1){
-				PID_Rotor.Kp = init_r_p_gain;
-				PID_Rotor.Ki = init_r_i_gain;
-				PID_Rotor.Kd = init_r_d_gain;
-				PID_Pend.Kp = init_p_p_gain;
-				PID_Pend.Ki = init_p_i_gain;
-				PID_Pend.Kd = init_p_d_gain;
+				ctl_state.PID_Rotor.Kp = init_r_p_gain;
+				ctl_state.PID_Rotor.Ki = init_r_i_gain;
+				ctl_state.PID_Rotor.Kd = init_r_d_gain;
+				ctl_state.PID_Pend.Kp = init_p_p_gain;
+				ctl_state.PID_Pend.Ki = init_p_i_gain;
+				ctl_state.PID_Pend.Kd = init_p_d_gain;
 				current_error_rotor_integral = 0;
 				enable_state_feedback = init_enable_state_feedback;
 				integral_compensator_gain = init_integral_compensator_gain;
@@ -2259,10 +2272,11 @@ int main(void) {
 				 * of stepper motor steps.
 				 */
 
-				pid_filter_control_execute(&PID_Rotor, current_error_rotor_steps,
-						sample_period_rotor,  Deriv_Filt_Rotor);
+				ctl_target.rotor_angle_ref_rad = sys_state.rotor_angle_rad
+				    - (*current_error_rotor_steps) * STEPPER_RAD_PER_STEP;
+				controller_compute(&ctl_state, &sys_state, &ctl_target, &ctl_out);
 
-				rotor_control_target_steps = PID_Pend.control_output + PID_Rotor.control_output;
+				rotor_control_target_steps = ctl_out.rotor_accel_steps_s2;
 
 
 				if (enable_state_feedback == 1 && integral_compensator_gain != 0){
@@ -2361,15 +2375,16 @@ int main(void) {
 			if (ACCEL_CONTROL == 1) {
 				if (enable_rotor_plant_design != 0){
 					rotor_control_target_steps_filter_2 = rotor_plant_gain*rotor_control_target_steps_filter_2;
-					apply_acceleration(&rotor_control_target_steps_filter_2, &target_velocity_prescaled, Tsample);
+					ctl_out.rotor_accel_steps_s2 = rotor_control_target_steps_filter_2;
 				/* Applies if Rotor Gain defined */
 				} else if (enable_rotor_plant_gain_design == 1){
 					rotor_control_target_steps_gain = rotor_plant_gain * rotor_control_target_steps;
-					apply_acceleration(&rotor_control_target_steps_gain, &target_velocity_prescaled, Tsample);
+					ctl_out.rotor_accel_steps_s2 = rotor_control_target_steps_gain;
 				/* Applies if no Rotor Design is selected */
 				} else {
-					apply_acceleration(&rotor_control_target_steps, &target_velocity_prescaled, Tsample);
+					ctl_out.rotor_accel_steps_s2 = rotor_control_target_steps;
 				}
+				hardware_motor_write(&ctl_out, Tsample);
 			} else {
 				BSP_MotorControl_GoTo(0, rotor_control_target_steps/2);
 			}
@@ -2482,18 +2497,18 @@ int main(void) {
 				if (report_mode != 1000 && report_mode != 2000 && speed_governor == 0){
 					sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int)2, cycle_period_sum - 200,
 							current_cpu_cycle_delay_relative_report,
-							(int)(roundf(encoder_position)), display_parameter, (int)(PID_Pend.int_term)/100,
+							(int)(roundf(encoder_position)), display_parameter, (int)(ctl_state.PID_Pend.int_term)/100,
 							reference_tracking_command, (int)(roundf(rotor_control_target_steps)),
-							(int)(PID_Rotor.control_output)/100);
+							(int)(ctl_state.PID_Rotor.control_output)/100);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				}
 
 				if (report_mode != 1000 && report_mode != 2000 && (i % speed_scale) == 0 && speed_governor == 1){
 					sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int)2, cycle_period_sum - 200,
 							current_cpu_cycle_delay_relative_report,
-							(int)(roundf(encoder_position)), display_parameter, (int)(PID_Pend.int_term)/100,
+							(int)(roundf(encoder_position)), display_parameter, (int)(ctl_state.PID_Pend.int_term)/100,
 							reference_tracking_command, (int)(roundf(rotor_control_target_steps)),
-							(int)(PID_Rotor.control_output)/100);
+							(int)(ctl_state.PID_Rotor.control_output)/100);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				}
 
@@ -2503,8 +2518,8 @@ int main(void) {
 
 				if (report_mode == 1000){
 					sprintf(msg, "%i\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%i\t%i\r\n", (int)0,
-							PID_Pend.Kp, PID_Pend.Ki, PID_Pend.Kd,
-							PID_Rotor.Kp, PID_Rotor.Ki, PID_Rotor.Kd,
+							ctl_state.PID_Pend.Kp, ctl_state.PID_Pend.Ki, ctl_state.PID_Pend.Kd,
+							ctl_state.PID_Rotor.Kp, ctl_state.PID_Rotor.Ki, ctl_state.PID_Rotor.Kd,
 							max_speed/10, min_speed/10);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				}
