@@ -72,6 +72,14 @@ static char mode_string_disable_speed_prescale[UART_RX_BUFFER_SIZE];
 static char mode_string_disable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_enable_speed_governor[UART_RX_BUFFER_SIZE];
 static char mode_string_reset_system[UART_RX_BUFFER_SIZE];
+
+/* Rotor high-speed test / sysid variables (moved from main.c) ------------ */
+static int rotor_test_speed_min, rotor_test_speed_max;
+static int rotor_test_acceleration_max, swing_deceleration_max;
+static uint16_t current_speed;
+static int enable_pendulum_sysid_test;
+static int enable_full_sysid;
+static float full_sysid_max_freq_hz;
 /* ----------------------------------------------------------------------- */
 
 void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return) {

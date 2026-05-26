@@ -198,7 +198,6 @@ void app_run_control_session(AppControlContext *ctx)
 	app_reset_command_shaper_state(ctx);
 	rotor_position_command_steps_pf_prev = 0;
 	enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
-	slope_prev = 0;
 	rotor_track_comb_command = 0;
 	noise_rej_signal_prev = 0;
 	noise_rej_signal_filter_prev = 0;

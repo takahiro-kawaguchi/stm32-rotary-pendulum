@@ -337,8 +337,7 @@ float iir_LT_0, iir_LT_1, iir_LT_2;
 float fo_s, Wo_s, IWon_s, iir_0_s, iir_1_s, iir_2_s;
 
 /* Slope correction system variables */
-int slope;
-int slope_prev;
+/* slope, slope_prev → removed (write-only, never read) */
 float encoder_angle_slope_corr_steps;
 
 /* Adaptive control variables */
@@ -394,20 +393,18 @@ float mod_sin_carrier_frequency;
 int enable_pendulum_position_impulse_response_cycle;
 
 /* Rotor high speed test system variables */
-int swing_cycles, rotor_test_speed_min, rotor_test_speed_max;
-int rotor_test_acceleration_max, swing_deceleration_max;
-int start_angle_a[20], end_angle_a[20], motion_dwell_a[20];
-int abs_encoder_position_prior, abs_encoder_position_after, abs_encoder_position_max;
-uint16_t current_speed;
+/* swing_cycles, start/end_angle_a, motion_dwell_a,
+   abs_encoder_position_prior/after/max → removed (never referenced) */
+/* rotor_test_speed_min/max, rotor_test_acceleration_max, swing_deceleration_max,
+   current_speed → ui.c static */
 
 /*Pendulum system ID variable */
-int enable_pendulum_sysid_test;
+/* enable_pendulum_sysid_test → ui.c static */
 
 /* Full system identification variables */
-int enable_full_sysid;
+/* enable_full_sysid, full_sysid_max_freq_hz → ui.c static */
 float full_sysid_max_vel_amplitude_deg_per_s;
 float full_sysid_min_freq_hz;
-float full_sysid_max_freq_hz;
 int full_sysid_num_freqs;
 float full_sysid_freq_log_step;
 int full_sysid_start_index;
