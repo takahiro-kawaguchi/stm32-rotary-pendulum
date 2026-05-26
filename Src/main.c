@@ -142,8 +142,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
 
 
 /*
@@ -275,8 +275,12 @@ int ret;
 
 /* PID control system variables */
 float windup, rotor_windup;
-float *current_error_steps, *current_error_rotor_steps;
-float *sample_period, *sample_period_rotor;
+static float _current_error_steps, _current_error_rotor_steps;
+float *current_error_steps     = &_current_error_steps;
+float *current_error_rotor_steps = &_current_error_rotor_steps;
+static float _sample_period, _sample_period_rotor;
+float *sample_period       = &_sample_period;
+float *sample_period_rotor = &_sample_period_rotor;
 
 /* Loop timing measurement variables */
 int cycle_period_start;
@@ -284,8 +288,9 @@ int cycle_period_sum;
 int enable_cycle_delay_warning;
 
 /* PID control variables */
-float *deriv_lp_corner_f;
-float *deriv_lp_corner_f_rotor;
+static float _deriv_lp_corner_f, _deriv_lp_corner_f_rotor;
+float *deriv_lp_corner_f       = &_deriv_lp_corner_f;
+float *deriv_lp_corner_f_rotor = &_deriv_lp_corner_f_rotor;
 float proportional, rotor_p_gain;
 float integral, rotor_i_gain;
 float derivative, rotor_d_gain;
@@ -828,43 +833,7 @@ int main(void) {
 	/* Assign user interaction mode string values */
 	set_mode_strings();
 
-	/* Controller structure and variable allocation */
-	current_error_steps = malloc(sizeof(float));
-	if (current_error_steps == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
-	current_error_rotor_steps = malloc(sizeof(float));
-	if (current_error_rotor_steps == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
-	sample_period = malloc(sizeof(float));
-	if (sample_period == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
-	deriv_lp_corner_f = malloc(sizeof(float));
-	if (sample_period == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
-	deriv_lp_corner_f_rotor = malloc(sizeof(float));
-	if (sample_period == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
-	sample_period_rotor = malloc(sizeof(float));
-	if (sample_period == NULL) {
-		sprintf(test_msg, "Memory allocation error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
-				HAL_MAX_DELAY);
-	}
+	/* Controller structure and variable allocation: pointers use static backing vars (no malloc) */
 
 	if (RCC_SYS_CLOCK_FREQ != HAL_RCC_GetSysClockFreq()) {
 		sprintf(test_msg, "RCC_SYS_CLOCK_FREQ not equal to HAL_RCC_GetSysClockFreq() (%lu). Exiting.\r\n", HAL_RCC_GetSysClockFreq());
@@ -2038,7 +2007,7 @@ int main(void) {
 			}
 
 			if (enable_rotor_position_step_response_cycle == 1 && enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
-				if (STEP_RESPONSE_AMP_LIMIT_ENABLE == 1 && abs(rotor_sine_drive) > STEP_RESPONSE_AMP_LIMIT){
+				if (STEP_RESPONSE_AMP_LIMIT_ENABLE == 1 && fabsf(rotor_sine_drive) > STEP_RESPONSE_AMP_LIMIT){
 					chirp_cycle = chirp_cycle + 1;
 				} else {
 					if (enable_mod_sin_rotor_tracking == 1){
