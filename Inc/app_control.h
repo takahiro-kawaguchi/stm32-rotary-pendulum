@@ -6,6 +6,24 @@
 #include "controller.h"
 #include "command_shaper.h"
 
+/*
+ * SessionInitialParams: snapshot of gain/mode state at the start of each
+ * control session. Saved by app_session.c, restored by app_control.c and
+ * app_runtime.c when the user resets gains during a live session.
+ */
+typedef struct {
+	float Kp_rotor, Ki_rotor, Kd_rotor;
+	float Kp_pend,  Ki_pend,  Kd_pend;
+	float integral_compensator_gain;
+	float feedforward_gain;
+	int enable_state_feedback;
+	int enable_disturbance_rejection_step;
+	int enable_sensitivity_fnc_step;
+	int enable_noise_rejection_step;
+	int enable_rotor_plant_design;
+	int enable_rotor_plant_gain_design;
+} SessionInitialParams;
+
 typedef struct AppControlContext {
 	SensorRaw core_hw_raw;
 	SensorCalib core_hw_cal;
@@ -15,6 +33,7 @@ typedef struct AppControlContext {
 	ControlTarget core_ctl_target;
 	ControlOutput core_ctl_out;
 	CommandShaperState core_cmd_shaper_state;
+	SessionInitialParams init_params;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;

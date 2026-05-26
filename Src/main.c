@@ -244,8 +244,7 @@ float rotor_control_target_steps_curr;
 int rotor_position_delta;
 int initial_rotor_position;
 int cycle_count;
-int i, j, k, m;
-int ret;
+/* i, j, k, m, ret → local in app_run_control_session() */
 
 /* PID control system variables */
 float windup, rotor_windup;
@@ -337,17 +336,7 @@ int swing_up_state, swing_up_state_prev;
 int stage_count;
 int stage_amp;
 
-/* Initial control state parameter storage */
-float init_r_p_gain, init_r_i_gain, init_r_d_gain;
-float init_p_p_gain, init_p_i_gain, init_p_d_gain;
-int init_enable_state_feedback;
-float init_integral_compensator_gain;
-float init_feedforward_gain;
-int init_enable_disturbance_rejection_step;
-int init_enable_sensitivity_fnc_step;
-int init_enable_noise_rejection_step;
-int init_enable_rotor_plant_design;
-int init_enable_rotor_plant_gain_design;
+/* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
 
 /* Low pass filter variables */
 float fo, Wo, IWon, iir_0, iir_1, iir_2;
@@ -505,6 +494,7 @@ uint32_t readBytes;
 
 
 int main(void) {
+	int k;
 
 	/* Initialize reset state indicating that reset has occurred */
 

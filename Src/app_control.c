@@ -86,21 +86,20 @@ void control_shutdown_sequence(AppControlContext *ctx)
 int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 {
 	if (enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && enable_angle_cal == 0) {
-		ctx->core_ctl_state.PID_Rotor.Kp = init_r_p_gain;
-		ctx->core_ctl_state.PID_Rotor.Ki = init_r_i_gain;
-		ctx->core_ctl_state.PID_Rotor.Kd = init_r_d_gain;
-		ctx->core_ctl_state.PID_Pend.Kp = init_p_p_gain;
-		ctx->core_ctl_state.PID_Pend.Ki = init_p_i_gain;
-		ctx->core_ctl_state.PID_Pend.Kd = init_p_d_gain;
-		enable_state_feedback = init_enable_state_feedback;
-		integral_compensator_gain = init_integral_compensator_gain;
-		feedforward_gain = init_feedforward_gain;
-		enable_state_feedback = init_enable_state_feedback;
-		enable_disturbance_rejection_step = init_enable_disturbance_rejection_step;
-		enable_sensitivity_fnc_step = init_enable_sensitivity_fnc_step;
-		enable_noise_rejection_step = init_enable_noise_rejection_step;
-		enable_rotor_plant_design = init_enable_rotor_plant_design;
-		enable_rotor_plant_gain_design = init_enable_rotor_plant_gain_design;
+		ctx->core_ctl_state.PID_Rotor.Kp = ctx->init_params.Kp_rotor;
+		ctx->core_ctl_state.PID_Rotor.Ki = ctx->init_params.Ki_rotor;
+		ctx->core_ctl_state.PID_Rotor.Kd = ctx->init_params.Kd_rotor;
+		ctx->core_ctl_state.PID_Pend.Kp  = ctx->init_params.Kp_pend;
+		ctx->core_ctl_state.PID_Pend.Ki  = ctx->init_params.Ki_pend;
+		ctx->core_ctl_state.PID_Pend.Kd  = ctx->init_params.Kd_pend;
+		enable_state_feedback             = ctx->init_params.enable_state_feedback;
+		integral_compensator_gain         = ctx->init_params.integral_compensator_gain;
+		feedforward_gain                  = ctx->init_params.feedforward_gain;
+		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
+		enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
+		enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
+		enable_rotor_plant_design         = ctx->init_params.enable_rotor_plant_design;
+		enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
 	}
 
 	int ui_status = ui_process_runtime_input(i, &ctx->core_ctl_state.PID_Pend,

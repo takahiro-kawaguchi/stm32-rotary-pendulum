@@ -11,6 +11,8 @@
 
 void app_run_control_session(AppControlContext *ctx)
 {
+	int i = 0, k, m, ret;
+
 	enable_control_action = ENABLE_CONTROL_ACTION;
 
 	if (reset_state == 1) {
@@ -161,7 +163,6 @@ void app_run_control_session(AppControlContext *ctx)
 	*current_error_rotor_steps = 0;
 
 	cycle_count = CYCLE_LIMIT;
-	i = 0;
 	rotor_position_steps = 0;
 	rotor_position_steps_prev = 0;
 	rotor_position_filter_steps = 0;
@@ -213,21 +214,20 @@ void app_run_control_session(AppControlContext *ctx)
 	}
 	__HAL_DMA_RESET_HANDLE_STATE(&hdma_usart2_rx);
 
-	init_r_p_gain = ctx->core_ctl_state.PID_Rotor.Kp;
-	init_r_i_gain = ctx->core_ctl_state.PID_Rotor.Ki;
-	init_r_d_gain = ctx->core_ctl_state.PID_Rotor.Kd;
-	init_p_p_gain = ctx->core_ctl_state.PID_Pend.Kp;
-	init_p_i_gain = ctx->core_ctl_state.PID_Pend.Ki;
-	init_p_d_gain = ctx->core_ctl_state.PID_Pend.Kd;
-	init_enable_state_feedback = enable_state_feedback;
-	init_integral_compensator_gain = integral_compensator_gain;
-	init_feedforward_gain = feedforward_gain;
-	init_enable_state_feedback = enable_state_feedback;
-	init_enable_disturbance_rejection_step = enable_disturbance_rejection_step;
-	init_enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
-	init_enable_noise_rejection_step = enable_noise_rejection_step;
-	init_enable_rotor_plant_design = enable_rotor_plant_design;
-	init_enable_rotor_plant_gain_design = enable_rotor_plant_gain_design;
+	ctx->init_params.Kp_rotor = ctx->core_ctl_state.PID_Rotor.Kp;
+	ctx->init_params.Ki_rotor = ctx->core_ctl_state.PID_Rotor.Ki;
+	ctx->init_params.Kd_rotor = ctx->core_ctl_state.PID_Rotor.Kd;
+	ctx->init_params.Kp_pend  = ctx->core_ctl_state.PID_Pend.Kp;
+	ctx->init_params.Ki_pend  = ctx->core_ctl_state.PID_Pend.Ki;
+	ctx->init_params.Kd_pend  = ctx->core_ctl_state.PID_Pend.Kd;
+	ctx->init_params.enable_state_feedback           = enable_state_feedback;
+	ctx->init_params.integral_compensator_gain       = integral_compensator_gain;
+	ctx->init_params.feedforward_gain                = feedforward_gain;
+	ctx->init_params.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
+	ctx->init_params.enable_sensitivity_fnc_step     = enable_sensitivity_fnc_step;
+	ctx->init_params.enable_noise_rejection_step     = enable_noise_rejection_step;
+	ctx->init_params.enable_rotor_plant_design       = enable_rotor_plant_design;
+	ctx->init_params.enable_rotor_plant_gain_design  = enable_rotor_plant_gain_design;
 
 	if (select_suspended_mode == 1) {
 		load_disturbance_sensitivity_scale = 1.0;
