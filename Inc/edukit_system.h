@@ -450,7 +450,7 @@ typedef struct
 		);\
 } while(0)
 
-__STATIC_INLINE void DWT_Delay_until_cycle(volatile uint32_t cycle);
+/* DWT_Delay_until_cycle defined in main.c — not declared here to avoid -Wunused warnings */
 
 /* pid_filter_control_execute → private pid_execute in controller.c */
 
