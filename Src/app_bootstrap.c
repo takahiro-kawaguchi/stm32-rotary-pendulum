@@ -100,17 +100,17 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	set_mode_strings();
 
 	if (RCC_SYS_CLOCK_FREQ != HAL_RCC_GetSysClockFreq()) {
-		sprintf(test_msg,
+		sprintf(uart_tx_buf,
 				"RCC_SYS_CLOCK_FREQ not equal to HAL_RCC_GetSysClockFreq() (%lu). Exiting.\r\n",
 				HAL_RCC_GetSysClockFreq());
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf),
 				HAL_MAX_DELAY);
 	}
 	if (RCC_HCLK_FREQ != HAL_RCC_GetHCLKFreq()) {
-		sprintf(test_msg,
+		sprintf(uart_tx_buf,
 				"RCC_HCLK_FREQ not equal to HAL_RCC_GetHCLKFreq() (%lu). Exiting.\r\n",
 				HAL_RCC_GetHCLKFreq());
-		HAL_UART_Transmit(&huart2, (uint8_t*) test_msg, strlen(test_msg),
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf),
 				HAL_MAX_DELAY);
 	}
 
@@ -144,8 +144,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	}
 
 	ctx->timing.tick_read_cycle_start = HAL_GetTick();
-	sprintf(msg, "\n\rSystem Starting Prepare to Enter Mode Selection... ");
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "\n\rSystem Starting Prepare to Enter Mode Selection... ");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	ctx->enable_adaptive_mode = ENABLE_ADAPTIVE_MODE;
 	ctx->adaptive_state = ADAPTIVE_STATE;

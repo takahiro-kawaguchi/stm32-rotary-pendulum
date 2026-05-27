@@ -1,4 +1,4 @@
-﻿
+
 /*
  ******************************************************************************
  * @file    Multi/Examples/MotionControl/IHM01A1_ExampleFor1Motor/Src/main.c
@@ -209,10 +209,7 @@ uint8_t RxBuffer[UART_RX_BUFFER_SIZE];
 /* enable_speed_prescale → write-only (never read), removed */
 
 /* System data reporting */
-char tmp_string[256];
-char msg[192];
-/* msg_pad → never referenced, removed */
-char test_msg[128];
+char uart_tx_buf[192];
 
 /*
  * Timer 3, UART Transmit, and UART DMA Receive declarations

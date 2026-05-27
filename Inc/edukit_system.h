@@ -516,10 +516,7 @@ extern float target_velocity_prescaled;
 /* enable_speed_prescale → write-only (never read), removed */
 
 /* System data reporting */
-extern char tmp_string[256];
-extern char msg[192];
-/* msg_pad → never referenced, removed */
-extern char test_msg[128];
+extern char uart_tx_buf[192];
 
 /* System timing variables */
 
