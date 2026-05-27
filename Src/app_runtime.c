@@ -393,7 +393,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
 		enable_sensitivity_fnc_step     = ctx->init_params.enable_sensitivity_fnc_step;
 		enable_noise_rejection_step     = ctx->init_params.enable_noise_rejection_step;
-		enable_rotor_plant_design       = ctx->init_params.enable_rotor_plant_design;
+		ctx->plant.enable_rotor_plant_design = ctx->init_params.enable_rotor_plant_design;
 	}
 }
 

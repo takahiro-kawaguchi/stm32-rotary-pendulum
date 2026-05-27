@@ -39,6 +39,19 @@ typedef struct {
 } LoopTimingState;
 
 typedef struct {
+	int select_rotor_plant_design;
+	int enable_rotor_plant_design;
+	int enable_rotor_plant_gain_design;
+	float rotor_plant_gain;
+	float rotor_damping_coefficient;
+	float rotor_natural_frequency;
+	float ao, Wn2;
+	float c0, c1, c2, c3, c4;
+	float fo_r, Wo_r, IWon_r;
+	float iir_0_r, iir_1_r, iir_2_r;
+} RotorPlantState;
+
+typedef struct {
 	float iir_0, iir_1, iir_2;           /* rotor position LP filter */
 	float iir_LT_0, iir_LT_1, iir_LT_2; /* long-term LP filter */
 	float iir_0_s, iir_1_s, iir_2_s;    /* step-response LP filter */
@@ -56,6 +69,7 @@ typedef struct AppControlContext {
 	SessionInitialParams init_params;
 	LoopTimingState timing;
 	RotorFilterState lpf;
+	RotorPlantState plant;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;

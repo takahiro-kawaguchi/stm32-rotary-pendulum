@@ -98,8 +98,8 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
 		enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
 		enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
-		enable_rotor_plant_design         = ctx->init_params.enable_rotor_plant_design;
-		enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
+		ctx->plant.enable_rotor_plant_design         = ctx->init_params.enable_rotor_plant_design;
+		ctx->plant.enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
 	}
 
 	int ui_status = ui_process_runtime_input(i, ctx, &ctx->core_ctl_state.PID_Pend,
@@ -215,19 +215,19 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 	shaper_cfg.full_sysid_min_freq_hz = full_sysid_min_freq_hz;
 	shaper_cfg.full_sysid_num_freqs = full_sysid_num_freqs;
 	shaper_cfg.full_sysid_freq_log_step = full_sysid_freq_log_step;
-	shaper_cfg.enable_rotor_plant_design = enable_rotor_plant_design;
-	shaper_cfg.enable_rotor_plant_gain_design = enable_rotor_plant_gain_design;
-	shaper_cfg.rotor_plant_gain = rotor_plant_gain;
-	shaper_cfg.rotor_damping_coefficient = rotor_damping_coefficient;
-	shaper_cfg.rotor_natural_frequency = rotor_natural_frequency;
-	shaper_cfg.c0 = c0;
-	shaper_cfg.c1 = c1;
-	shaper_cfg.c2 = c2;
-	shaper_cfg.c3 = c3;
-	shaper_cfg.c4 = c4;
-	shaper_cfg.iir_0_r = iir_0_r;
-	shaper_cfg.iir_1_r = iir_1_r;
-	shaper_cfg.iir_2_r = iir_2_r;
+	shaper_cfg.enable_rotor_plant_design = ctx->plant.enable_rotor_plant_design;
+	shaper_cfg.enable_rotor_plant_gain_design = ctx->plant.enable_rotor_plant_gain_design;
+	shaper_cfg.rotor_plant_gain = ctx->plant.rotor_plant_gain;
+	shaper_cfg.rotor_damping_coefficient = ctx->plant.rotor_damping_coefficient;
+	shaper_cfg.rotor_natural_frequency = ctx->plant.rotor_natural_frequency;
+	shaper_cfg.c0 = ctx->plant.c0;
+	shaper_cfg.c1 = ctx->plant.c1;
+	shaper_cfg.c2 = ctx->plant.c2;
+	shaper_cfg.c3 = ctx->plant.c3;
+	shaper_cfg.c4 = ctx->plant.c4;
+	shaper_cfg.iir_0_r = ctx->plant.iir_0_r;
+	shaper_cfg.iir_1_r = ctx->plant.iir_1_r;
+	shaper_cfg.iir_2_r = ctx->plant.iir_2_r;
 
 	ctx->core_command_shaper_ops->process_and_actuate(&shaper_cfg, i,
 			rotor_position_command_steps, &rotor_control_target_steps,

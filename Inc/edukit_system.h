@@ -566,15 +566,9 @@ extern float rotor_position_diff, rotor_position_diff_prev;
 extern float rotor_position_diff_filter, rotor_position_diff_filter_prev;
 /* rotor_target_in_steps, initial_rotor_position → never referenced, removed */
 
-/* Rotor Plant Design variables */
-extern int select_rotor_plant_design, enable_rotor_plant_design, enable_rotor_plant_gain_design;
-/* rotor_control_target_steps_int → never referenced, removed */
-extern float rotor_damping_coefficient, rotor_natural_frequency;
-extern float rotor_plant_gain;
+/* Rotor Plant Design variables → ctx->plant (RotorPlantState) */
 /* rotor_control_target_steps_gain/filter_2/filter_prev_2/prev_prev/filter_prev_prev_2
    → CommandShaperState fields, no globals (dangling externs removed) */
-extern float c0, c1, c2, c3, c4, ao, Wn2;
-extern float fo_r, Wo_r, IWon_r, iir_0_r, iir_1_r, iir_2_r;
 
 /* Encoder position variables */
 /* cnt3, range_error → hardware.c static */

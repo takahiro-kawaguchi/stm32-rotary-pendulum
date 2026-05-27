@@ -259,13 +259,7 @@ float rotor_position_diff, rotor_position_diff_prev;
 float rotor_position_diff_filter, rotor_position_diff_filter_prev;
 /* rotor_target_in_steps → never referenced, removed */
 
-/* Rotor Plant Design variables */
-int select_rotor_plant_design, enable_rotor_plant_design, enable_rotor_plant_gain_design;
-/* rotor_control_target_steps_int → never referenced, removed */
-float rotor_damping_coefficient, rotor_natural_frequency;
-float rotor_plant_gain;
-float c0, c1, c2, c3, c4, ao, Wn2;
-float fo_r, Wo_r, IWon_r, iir_0_r, iir_1_r, iir_2_r;
+/* Rotor Plant Design variables → ctx->plant (RotorPlantState) */
 
 /* Encoder position variables */
 /* cnt3, range_error → moved to hardware.c */

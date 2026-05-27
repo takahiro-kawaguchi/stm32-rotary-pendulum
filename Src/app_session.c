@@ -80,29 +80,29 @@ void app_prepare_control_session(AppControlContext *ctx)
 	app_assign_pid_gains_from_user(ctx);
 	integral_compensator_gain = integral_compensator_gain * CONTROLLER_GAIN_SCALE;
 
-	if (rotor_damping_coefficient != 0 || rotor_natural_frequency != 0) {
-		Wn2 = rotor_natural_frequency * rotor_natural_frequency;
-		rotor_plant_gain = rotor_plant_gain * Wn2;
-		ao = ((2.0F / Tsample) * (2.0F / Tsample)
-				+ (2.0F / Tsample) * 2.0F * rotor_damping_coefficient
-						* rotor_natural_frequency
-				+ rotor_natural_frequency * rotor_natural_frequency);
-		c0 = ((2.0F / Tsample) * (2.0F / Tsample) / ao);
-		c1 = -2.0F * c0;
-		c2 = c0;
-		c3 = -(2.0F * rotor_natural_frequency * rotor_natural_frequency
-				- 2.0F * (2.0F / Tsample) * (2.0F / Tsample)) / ao;
-		c4 = -((2.0F / Tsample) * (2.0F / Tsample)
-				- (2.0F / Tsample) * 2.0F * rotor_damping_coefficient
-						* rotor_natural_frequency
-				+ rotor_natural_frequency * rotor_natural_frequency) / ao;
+	if (ctx->plant.rotor_damping_coefficient != 0 || ctx->plant.rotor_natural_frequency != 0) {
+		ctx->plant.Wn2 = ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency;
+		ctx->plant.rotor_plant_gain = ctx->plant.rotor_plant_gain * ctx->plant.Wn2;
+		ctx->plant.ao = ((2.0F / Tsample) * (2.0F / Tsample)
+				+ (2.0F / Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+						* ctx->plant.rotor_natural_frequency
+				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency);
+		ctx->plant.c0 = ((2.0F / Tsample) * (2.0F / Tsample) / ctx->plant.ao);
+		ctx->plant.c1 = -2.0F * ctx->plant.c0;
+		ctx->plant.c2 = ctx->plant.c0;
+		ctx->plant.c3 = -(2.0F * ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency
+				- 2.0F * (2.0F / Tsample) * (2.0F / Tsample)) / ctx->plant.ao;
+		ctx->plant.c4 = -((2.0F / Tsample) * (2.0F / Tsample)
+				- (2.0F / Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+						* ctx->plant.rotor_natural_frequency
+				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency) / ctx->plant.ao;
 	}
 
-	if (enable_rotor_plant_design == 2) {
-		IWon_r = 2 / (Wo_r * Tsample);
-		iir_0_r = 1 - (1 / (1 + IWon_r));
-		iir_1_r = -iir_0_r;
-		iir_2_r = (1 / (1 + IWon_r)) * (1 - IWon_r);
+	if (ctx->plant.enable_rotor_plant_design == 2) {
+		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * Tsample);
+		ctx->plant.iir_0_r = 1 - (1 / (1 + ctx->plant.IWon_r));
+		ctx->plant.iir_1_r = -ctx->plant.iir_0_r;
+		ctx->plant.iir_2_r = (1 / (1 + ctx->plant.IWon_r)) * (1 - ctx->plant.IWon_r);
 	}
 }
 
@@ -321,8 +321,8 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->init_params.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
 	ctx->init_params.enable_sensitivity_fnc_step     = enable_sensitivity_fnc_step;
 	ctx->init_params.enable_noise_rejection_step     = enable_noise_rejection_step;
-	ctx->init_params.enable_rotor_plant_design       = enable_rotor_plant_design;
-	ctx->init_params.enable_rotor_plant_gain_design  = enable_rotor_plant_gain_design;
+	ctx->init_params.enable_rotor_plant_design       = ctx->plant.enable_rotor_plant_design;
+	ctx->init_params.enable_rotor_plant_gain_design  = ctx->plant.enable_rotor_plant_gain_design;
 
 	if (select_suspended_mode == 1) {
 		load_disturbance_sensitivity_scale = 1.0;
@@ -346,8 +346,8 @@ void app_run_control_session(AppControlContext *ctx)
 		enable_disturbance_rejection_step = 0;
 		enable_sensitivity_fnc_step = 0;
 		enable_noise_rejection_step = 0;
-		enable_rotor_plant_design = 0;
-		enable_rotor_plant_gain_design = 0;
+		ctx->plant.enable_rotor_plant_design = 0;
+		ctx->plant.enable_rotor_plant_gain_design = 0;
 
 		torq_current_val = MAX_TORQUE_SWING_UP;
 		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
