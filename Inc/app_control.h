@@ -5,6 +5,7 @@
 #include "observer.h"
 #include "controller.h"
 #include "command_shaper.h"
+#include "edukit_system.h"
 
 typedef struct {
 	float proportional;
@@ -82,6 +83,44 @@ typedef struct {
 } RotorFilterState;
 
 typedef struct {
+	float rotor_control_target_steps;
+	float reference_tracking_command;
+	int   rotor_position_steps;
+	float rotor_position_command_steps;
+	float rotor_position_command_steps_pf;
+	float rotor_position_command_steps_pf_prev;
+	float rotor_position_steps_prev;
+	float rotor_position_filter_steps;
+	float rotor_position_filter_steps_prev;
+	float rotor_position_diff;
+	float rotor_position_diff_prev;
+	float rotor_position_diff_filter;
+	float rotor_position_diff_filter_prev;
+	int   rotor_position_step_polarity;
+	int   impulse_start_index;
+} RotorPositionState;
+
+typedef struct {
+	float encoder_position;
+	int   encoder_position_steps;
+	int   encoder_position_init;
+	int   encoder_position_down;
+	float encoder_position_offset;
+	float encoder_position_offset_zero;
+	int   enable_angle_cal;
+	int   offset_end_state;
+	int   offset_start_index;
+	int   angle_index;
+	int   angle_avg_index;
+	int   angle_avg_span;
+	int   offset_angle[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
+	float encoder_position_offset_avg[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
+	int   angle_cal_end;
+	int   angle_cal_complete;
+	float encoder_angle_slope_corr_steps;
+} EncoderCalibState;
+
+typedef struct {
 	int   enable_rotor_chirp;
 	int   chirp_cycle;
 	int   chirp_dwell_cycle;
@@ -127,6 +166,8 @@ typedef struct AppControlContext {
 	RotorFilterState lpf;
 	RotorPlantState plant;
 	RotorTrackingState tracking;
+	RotorPositionState rotor_pos;
+	EncoderCalibState enc_cal;
 	PidGainSet gains;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	float angle_scale;

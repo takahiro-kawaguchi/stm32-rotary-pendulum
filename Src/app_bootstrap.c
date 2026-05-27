@@ -10,11 +10,11 @@
 
 void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 {
-	encoder_position = 0;
-	encoder_position_down = 0;
+	ctx->enc_cal.encoder_position = 0;
+	ctx->enc_cal.encoder_position_down = 0;
 	ctx->angle_scale = ENCODER_READ_ANGLE_SCALE;
 
-	rotor_control_target_steps = 0;
+	ctx->rotor_pos.rotor_control_target_steps = 0;
 	app_reset_command_shaper_state(ctx);
 	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
@@ -47,7 +47,7 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	BSP_MotorControl_Init(BSP_MOTOR_CONTROL_BOARD_ID_L6474, motor_init);
 
 	MX_TIM3_Init();
-	encoder_position_init = 0;
+	ctx->enc_cal.encoder_position_init = 0;
 	HAL_Delay(10);
 	MX_USART2_UART_Init();
 

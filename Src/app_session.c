@@ -119,9 +119,9 @@ void app_run_control_session(AppControlContext *ctx)
 	if (ctx->reset_state == 1) {
 		hardware_rotor_home();
 	}
-	ret = hardware_rotor_position_read(&rotor_position_steps);
+	ret = hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 	sprintf(msg, "\r\nPrepare for Control Start - Initial Rotor Position: %i\r\n",
-			rotor_position_steps);
+			ctx->rotor_pos.rotor_position_steps);
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	BSP_MotorControl_GoTo(0, 3);
@@ -139,32 +139,32 @@ void app_run_control_session(AppControlContext *ctx)
 	sprintf(msg, "Test for Pendulum at Rest - Waiting for Pendulum to Stabilize\r\n");
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-	encoder_position_init = 0;
-	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+	ctx->enc_cal.encoder_position_init = 0;
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
-	encoder_position_prev = encoder_position_steps;
+	encoder_position_prev = ctx->enc_cal.encoder_position_steps;
 	HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
-	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
-	encoder_position_curr = encoder_position_steps;
+	encoder_position_curr = ctx->enc_cal.encoder_position_steps;
 	while (encoder_position_curr != encoder_position_prev) {
-		ret = hardware_encoder_position_read(&encoder_position_steps,
-				encoder_position_init, &htim3);
-		encoder_position_prev = encoder_position_steps;
+		ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+				ctx->enc_cal.encoder_position_init, &htim3);
+		encoder_position_prev = ctx->enc_cal.encoder_position_steps;
 		HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
-		ret = hardware_encoder_position_read(&encoder_position_steps,
-				encoder_position_init, &htim3);
-		encoder_position_curr = encoder_position_steps;
+		ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+				ctx->enc_cal.encoder_position_init, &htim3);
+		encoder_position_curr = ctx->enc_cal.encoder_position_steps;
 
 		if (encoder_position_prev == encoder_position_curr) {
 			HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
-			ret = hardware_encoder_position_read(&encoder_position_steps,
-					encoder_position_init, &htim3);
-			encoder_position_prev = encoder_position_steps;
+			ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+					ctx->enc_cal.encoder_position_init, &htim3);
+			encoder_position_prev = ctx->enc_cal.encoder_position_steps;
 			HAL_Delay(INITIAL_PENDULUM_MOTION_TEST_DELAY);
-			ret = hardware_encoder_position_read(&encoder_position_steps,
-					encoder_position_init, &htim3);
-			encoder_position_curr = encoder_position_steps;
+			ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+					ctx->enc_cal.encoder_position_init, &htim3);
+			encoder_position_curr = ctx->enc_cal.encoder_position_steps;
 			if (encoder_position_prev == encoder_position_curr) {
 				break;
 			}
@@ -180,9 +180,9 @@ void app_run_control_session(AppControlContext *ctx)
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	HAL_Delay(100);
-	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
-	encoder_position_init = encoder_position_steps;
+	ctx->enc_cal.encoder_position_init = ctx->enc_cal.encoder_position_steps;
 
 	if (ret == -1) {
 		sprintf(msg, "Encoder Position Under Range Error\r\n");
@@ -193,10 +193,10 @@ void app_run_control_session(AppControlContext *ctx)
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
 
-	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
-	encoder_position_down = encoder_position_steps;
-	sprintf(msg, "Pendulum Initial Angle %i\r\n", encoder_position_steps);
+	ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_steps;
+	sprintf(msg, "Pendulum Initial Angle %i\r\n", ctx->enc_cal.encoder_position_steps);
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	if (ctx->enable_swing_up == 0) {
@@ -223,18 +223,18 @@ void app_run_control_session(AppControlContext *ctx)
 		uint32_t tick_wait_start = HAL_GetTick();
 		if (ctx->select_suspended_mode == 0) {
 			while (1) {
-				ret = hardware_encoder_position_read(&encoder_position_steps,
-						encoder_position_init, &htim3);
+				ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+						ctx->enc_cal.encoder_position_init, &htim3);
 				if (fabs(
-						encoder_position_steps - encoder_position_down
+						ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
 								- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 					HAL_Delay(START_ANGLE_DELAY);
 					break;
 				}
 				if (fabs(
-						encoder_position_steps - encoder_position_down
+						ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
 								+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-					encoder_position_down = encoder_position_down
+					ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_down
 							- 2 * (int) (180 * ctx->angle_scale);
 					HAL_Delay(START_ANGLE_DELAY);
 					break;
@@ -264,17 +264,17 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 
 	ctx->timing.cycle_count = CYCLE_LIMIT;
-	rotor_position_steps = 0;
-	rotor_position_steps_prev = 0;
-	rotor_position_filter_steps = 0;
-	rotor_position_filter_steps_prev = 0;
-	rotor_position_command_steps = 0;
-	rotor_position_diff = 0;
-	rotor_position_diff_prev = 0;
-	rotor_position_diff_filter = 0;
-	rotor_position_diff_filter_prev = 0;
-	rotor_position_step_polarity = 1;
-	encoder_angle_slope_corr_steps = 0;
+	ctx->rotor_pos.rotor_position_steps = 0;
+	ctx->rotor_pos.rotor_position_steps_prev = 0;
+	ctx->rotor_pos.rotor_position_filter_steps = 0;
+	ctx->rotor_pos.rotor_position_filter_steps_prev = 0;
+	ctx->rotor_pos.rotor_position_command_steps = 0;
+	ctx->rotor_pos.rotor_position_diff = 0;
+	ctx->rotor_pos.rotor_position_diff_prev = 0;
+	ctx->rotor_pos.rotor_position_diff_filter = 0;
+	ctx->rotor_pos.rotor_position_diff_filter_prev = 0;
+	ctx->rotor_pos.rotor_position_step_polarity = 1;
+	ctx->enc_cal.encoder_angle_slope_corr_steps = 0;
 	ctx->tracking.rotor_sine_drive = 0;
 	ctx->tracking.sine_drive_transition = 0;
 	ctx->tracking.rotor_mod_control = 1.0;
@@ -286,22 +286,22 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->tracking.chirp_cycle = 0;
 	ctx->tracking.chirp_dwell_cycle = 0;
 	ctx->tracking.pendulum_position_command_steps = 0;
-	impulse_start_index = 0;
+	ctx->rotor_pos.impulse_start_index = 0;
 	ctx->mode_transition_state = 0;
 	ctx->adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
-	rotor_position_command_steps_pf_prev = 0;
+	ctx->rotor_pos.rotor_position_command_steps_pf_prev = 0;
 	ctx->enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
 	ctx->tracking.rotor_track_comb_command = 0;
 	ctx->tracking.full_sysid_start_index = -1;
 	ctx->timing.current_cpu_cycle = 0;
 	ctx->speed_scale = DATA_REPORT_SPEED_SCALE;
 	ctx->speed_governor = 0;
-	encoder_position_offset = 0;
-	encoder_position_offset_zero = 0;
+	ctx->enc_cal.encoder_position_offset = 0;
+	ctx->enc_cal.encoder_position_offset_zero = 0;
 
 	for (m = 0; m < ANGLE_CAL_OFFSET_STEP_COUNT + 1; m++) {
-		offset_angle[m] = 0;
+		ctx->enc_cal.offset_angle[m] = 0;
 	}
 
 	for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
@@ -341,7 +341,7 @@ void app_run_control_session(AppControlContext *ctx)
 		ctx->gains.enable_state_feedback = 0;
 		ctx->gains.integral_compensator_gain = 0;
 		ctx->gains.feedforward_gain = 1;
-		rotor_position_command_steps = 0;
+		ctx->rotor_pos.rotor_position_command_steps = 0;
 		ctx->gains.enable_state_feedback = 0;
 		ctx->gains.enable_disturbance_rejection_step = 0;
 		ctx->gains.enable_sensitivity_fnc_step = 0;
@@ -367,19 +367,19 @@ void app_run_control_session(AppControlContext *ctx)
 		while (1) {
 			SwingUpSensorState sus;
 			HAL_Delay(2);
-			ret = hardware_encoder_position_read(&encoder_position_steps,
-					encoder_position_init, &htim3);
+			ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+					ctx->enc_cal.encoder_position_init, &htim3);
 			hardware_swing_up_get(&sus);
 
 			if (fabs(
-					encoder_position_steps - encoder_position_down
+					ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
 							- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 				break;
 			}
 			if (fabs(
-					encoder_position_steps - encoder_position_down
+					ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
 							+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-				encoder_position_down = encoder_position_down
+				ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_down
 						- 2 * (int) (180 * ctx->angle_scale);
 				break;
 			}
@@ -406,8 +406,8 @@ void app_run_control_session(AppControlContext *ctx)
 					}
 					hardware_swing_up_set_prev_global_max(sus.global_max_encoder_position);
 					hardware_swing_up_reset_global_max();
-					ret = hardware_encoder_position_read(&encoder_position_steps,
-							encoder_position_init, &htim3);
+					ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+							ctx->enc_cal.encoder_position_init, &htim3);
 					hardware_swing_up_get(&sus);
 				}
 			}
@@ -435,15 +435,15 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->timing.target_cpu_cycle = DWT->CYCCNT;
 	ctx->timing.prev_cpu_cycle = DWT->CYCCNT;
 
-	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
 	if (ctx->select_suspended_mode == 0) {
-		encoder_position = encoder_position_steps - encoder_position_down
+		ctx->enc_cal.encoder_position = ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
 				- (int) (180 * ctx->angle_scale);
-		encoder_position = encoder_position - encoder_position_offset;
+		ctx->enc_cal.encoder_position = ctx->enc_cal.encoder_position - ctx->enc_cal.encoder_position_offset;
 	}
 
-	app_init_control_pipeline(ctx, encoder_position_init, ctx->timing.Tsample);
+	app_init_control_pipeline(ctx, ctx->enc_cal.encoder_position_init, ctx->timing.Tsample);
 
 	while (ctx->enable_control_action == 1) {
 		ret = control_handle_runtime_configuration(ctx, i);

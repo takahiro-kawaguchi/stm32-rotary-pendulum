@@ -226,79 +226,9 @@ static AppControlContext g_app = {
 	.core_command_shaper_ops = &COMMAND_SHAPER_OPS_DEFAULT,
 };
 
-/* Control system output signal */
-float rotor_control_target_steps;
-/* rotor_control_target_steps_curr → write-only, removed */
-
-/* Control system variables */
-/* rotor_position_delta, initial_rotor_position → never referenced, removed */
-int cycle_count;
-/* i, j, k, m, ret → local in app_run_control_session() */
-
-/* PID control variables → ctx->gains (PidGainSet) */
-/* Reference tracking command */
-float reference_tracking_command;
-
-/* Pendulum position and tracking command */
-
-/* Rotor position and tracking command */
-int rotor_position_steps;
-float rotor_position_command_steps;
-float rotor_position_command_steps_pf, rotor_position_command_steps_pf_prev;
-/* rotor_position_command_deg → ui.c static */
-float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
-float rotor_position_diff, rotor_position_diff_prev;
-float rotor_position_diff_filter, rotor_position_diff_filter_prev;
-/* rotor_target_in_steps → never referenced, removed */
-
-/* Rotor Plant Design variables → ctx->plant (RotorPlantState) */
-
-/* Encoder position variables */
-/* cnt3, range_error → moved to hardware.c */
-/* previous_encoder_position, max/global/prev_global_max_encoder_position → hardware.c static */
-float encoder_position;
-int encoder_position_steps;
-int encoder_position_init;
-int encoder_position_down;
-/* encoder_position_curr, encoder_position_prev → local in app_run_control_session() */
-
-/* Angle calibration variables */
-float encoder_position_offset;
-float encoder_position_offset_zero;
-int enable_angle_cal;
-/* enable_angle_cal_resp → ui.c static */
-int offset_end_state;
-int offset_start_index;
-int angle_index;
-int angle_avg_index;
-int angle_avg_span;
-int offset_angle[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
-float encoder_position_offset_avg[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
-int angle_cal_end;
-int angle_cal_complete;
-
-/* Swing Up system variables */
-/* enable_swing_up → ctx field */
-/* enable_swing_up_resp → ui.c static */
-/* peaked, handled_peak, zero_crossed,
-   max/global/prev_global_max_encoder_position, previous_encoder_position → hardware.c static */
-/* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
-
-/* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
-
-/* Slope correction system variables */
-/* slope, slope_prev → removed (write-only, never read) */
-float encoder_angle_slope_corr_steps;
-
-/* Adaptive control variables */
-/* adaptive_error, adaptive_threshold_low/high, error_sum_prev, error_sum,
-   error_sum_filter_prev, error_sum_filter, adaptive_entry_tick,
-   adaptive_dwell_period → removed (write-only, never read) */
-/* enable_adaptive_mode, adaptive_state, adaptive_state_change → ctx fields */
-
-/* Rotor impulse variables */
-int rotor_position_step_polarity;
-int impulse_start_index;
+/* Control system output signal → ctx->rotor_pos (RotorPositionState) */
+/* Rotor position, filter, diff, command, impulse → ctx->rotor_pos */
+/* Encoder position, angle calibration, slope correction → ctx->enc_cal (EncoderCalibState) */
 
 /* User configuration variables */
 /* clear_input, max_speed_read, min_speed_read, motor_response_model,

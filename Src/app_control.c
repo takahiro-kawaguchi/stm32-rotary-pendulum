@@ -70,14 +70,14 @@ void control_shutdown_sequence(AppControlContext *ctx)
 	}
 
 	hardware_sensor_read(&ctx->core_hw_raw, NULL);
-	rotor_position_steps = ctx->core_hw_raw.rotor_steps;
+	ctx->rotor_pos.rotor_position_steps = ctx->core_hw_raw.rotor_steps;
 	BSP_MotorControl_GoTo(0, 0);
 	BSP_MotorControl_SoftStop(0);
 
 	hardware_sensor_read(&ctx->core_hw_raw, NULL);
-	rotor_position_steps = ctx->core_hw_raw.rotor_steps;
+	ctx->rotor_pos.rotor_position_steps = ctx->core_hw_raw.rotor_steps;
 	sprintf(msg, "Exit Control at Rotor Angle, %.2f\r\n",
-			(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+			(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	NVIC_SystemReset();
@@ -85,7 +85,7 @@ void control_shutdown_sequence(AppControlContext *ctx)
 
 int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 {
-	if (ctx->enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && enable_angle_cal == 0) {
+	if (ctx->enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && ctx->enc_cal.enable_angle_cal == 0) {
 		ctx->core_ctl_state.PID_Rotor.Kp = ctx->init_params.Kp_rotor;
 		ctx->core_ctl_state.PID_Rotor.Ki = ctx->init_params.Ki_rotor;
 		ctx->core_ctl_state.PID_Rotor.Kd = ctx->init_params.Kd_rotor;
@@ -117,33 +117,33 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 
 int control_update_state_and_safety(AppControlContext *ctx)
 {
-	ctx->core_hw_cal.encoder_down_counts = encoder_position_down;
-	ctx->core_hw_cal.encoder_offset_counts = (float) encoder_position_offset;
+	ctx->core_hw_cal.encoder_down_counts = ctx->enc_cal.encoder_position_down;
+	ctx->core_hw_cal.encoder_offset_counts = (float) ctx->enc_cal.encoder_position_offset;
 	ctx->core_hw_cal.select_suspended_mode = ctx->select_suspended_mode;
 
 	hardware_sensor_read(&ctx->core_hw_raw, NULL);
 	ctx->core_observer_ops->update(&ctx->core_hw_raw, &ctx->core_hw_cal,
 			&ctx->core_obs_state, &ctx->core_sys_state);
 
-	encoder_position_steps = ctx->core_hw_raw.encoder_counts;
-	rotor_position_steps = ctx->core_hw_raw.rotor_steps;
-	encoder_position = (int) (ctx->core_sys_state.pendulum_angle_rad / ENCODER_RAD_PER_COUNT);
+	ctx->enc_cal.encoder_position_steps = ctx->core_hw_raw.encoder_counts;
+	ctx->rotor_pos.rotor_position_steps = ctx->core_hw_raw.rotor_steps;
+	ctx->enc_cal.encoder_position = (int) (ctx->core_sys_state.pendulum_angle_rad / ENCODER_RAD_PER_COUNT);
 
 	if (ctx->select_suspended_mode == 0) {
-		if ((encoder_position / ENCODER_READ_ANGLE_SCALE) > ENCODER_POSITION_POSITIVE_LIMIT
-				|| (encoder_position / ENCODER_READ_ANGLE_SCALE) < ENCODER_POSITION_NEGATIVE_LIMIT) {
+		if ((ctx->enc_cal.encoder_position / ENCODER_READ_ANGLE_SCALE) > ENCODER_POSITION_POSITIVE_LIMIT
+				|| (ctx->enc_cal.encoder_position / ENCODER_READ_ANGLE_SCALE) < ENCODER_POSITION_NEGATIVE_LIMIT) {
 			sprintf(msg, "Error Exit Encoder Position Exceeded: %i\r\n",
-					encoder_position_steps);
+					ctx->enc_cal.encoder_position_steps);
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 			return 1;
 		}
 	}
 
-	if (rotor_position_steps > (ROTOR_POSITION_POSITIVE_LIMIT
+	if (ctx->rotor_pos.rotor_position_steps > (ROTOR_POSITION_POSITIVE_LIMIT
 			* STEPPER_READ_POSITION_STEPS_PER_DEGREE)
-			|| rotor_position_steps < (ROTOR_POSITION_NEGATIVE_LIMIT
+			|| ctx->rotor_pos.rotor_position_steps < (ROTOR_POSITION_NEGATIVE_LIMIT
 					* STEPPER_READ_POSITION_STEPS_PER_DEGREE)) {
-		sprintf(msg, "Error Exit Motor Position Exceeded: %i\r\n", rotor_position_steps);
+		sprintf(msg, "Error Exit Motor Position Exceeded: %i\r\n", ctx->rotor_pos.rotor_position_steps);
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		return 1;
 	}
@@ -153,25 +153,25 @@ int control_update_state_and_safety(AppControlContext *ctx)
 
 void control_update_slope_correction(AppControlContext *ctx, int i)
 {
-	rotor_position_diff_prev = rotor_position_diff;
+	ctx->rotor_pos.rotor_position_diff_prev = ctx->rotor_pos.rotor_position_diff;
 
 	if (ctx->gains.enable_disturbance_rejection_step == 0) {
-		rotor_position_diff = rotor_position_filter_steps - rotor_position_command_steps;
+		ctx->rotor_pos.rotor_position_diff = ctx->rotor_pos.rotor_position_filter_steps - ctx->rotor_pos.rotor_position_command_steps;
 	}
 	if (ctx->gains.enable_disturbance_rejection_step == 1) {
-		rotor_position_diff = rotor_position_filter_steps;
+		ctx->rotor_pos.rotor_position_diff = ctx->rotor_pos.rotor_position_filter_steps;
 	}
 
-	if (ENABLE_ENCODER_ANGLE_SLOPE_CORRECTION == 1 && i > angle_cal_complete) {
-		rotor_position_diff_filter =
-				(float) (rotor_position_diff * ctx->lpf.iir_LT_0) + rotor_position_diff_prev * ctx->lpf.iir_LT_1
-						- rotor_position_diff_filter_prev * ctx->lpf.iir_LT_2;
+	if (ENABLE_ENCODER_ANGLE_SLOPE_CORRECTION == 1 && i > ctx->enc_cal.angle_cal_complete) {
+		ctx->rotor_pos.rotor_position_diff_filter =
+				(float) (ctx->rotor_pos.rotor_position_diff * ctx->lpf.iir_LT_0) + ctx->rotor_pos.rotor_position_diff_prev * ctx->lpf.iir_LT_1
+						- ctx->rotor_pos.rotor_position_diff_filter_prev * ctx->lpf.iir_LT_2;
 		if ((i < ENCODER_ANGLE_SLOPE_CORRECTION_CYCLE_LIMIT)
 				|| (ENCODER_ANGLE_SLOPE_CORRECTION_CYCLE_LIMIT == 0)) {
-			encoder_angle_slope_corr_steps =
-					rotor_position_diff_filter / ENCODER_ANGLE_SLOPE_CORRECTION_SCALE;
+			ctx->enc_cal.encoder_angle_slope_corr_steps =
+					ctx->rotor_pos.rotor_position_diff_filter / ENCODER_ANGLE_SLOPE_CORRECTION_SCALE;
 		}
-		rotor_position_diff_filter_prev = rotor_position_diff_filter;
+		ctx->rotor_pos.rotor_position_diff_filter_prev = ctx->rotor_pos.rotor_position_diff_filter;
 	}
 }
 
@@ -179,8 +179,8 @@ void control_update_dual_pid(AppControlContext *ctx)
 {
 	ControllerDualPidInput input;
 
-	input.rotor_position_filter_steps = rotor_position_filter_steps;
-	input.rotor_position_command_steps = rotor_position_command_steps;
+	input.rotor_position_filter_steps = ctx->rotor_pos.rotor_position_filter_steps;
+	input.rotor_position_command_steps = ctx->rotor_pos.rotor_position_command_steps;
 	input.feedforward_gain = ctx->gains.feedforward_gain;
 	input.integral_compensator_gain = ctx->gains.integral_compensator_gain;
 	input.load_disturbance_sensitivity_scale = ctx->gains.load_disturbance_sensitivity_scale;
@@ -201,7 +201,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 				&ctx->core_sys_state, &ctx->core_ctl_target, &ctx->core_ctl_out);
 	}
 
-	rotor_control_target_steps = ctx->core_ctl_out.rotor_accel_steps_s2;
+	ctx->rotor_pos.rotor_control_target_steps = ctx->core_ctl_out.rotor_accel_steps_s2;
 }
 
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
@@ -209,7 +209,7 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 	CommandShaperConfig shaper_cfg;
 	shaper_cfg.sample_period_s = ctx->timing.Tsample;
 	shaper_cfg.accel_control = ACCEL_CONTROL;
-	shaper_cfg.angle_cal_complete = angle_cal_complete;
+	shaper_cfg.angle_cal_complete = ctx->enc_cal.angle_cal_complete;
 	shaper_cfg.full_sysid_start_index = ctx->tracking.full_sysid_start_index;
 	shaper_cfg.full_sysid_max_vel_amplitude_deg_per_s = ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s;
 	shaper_cfg.full_sysid_min_freq_hz = ctx->tracking.full_sysid_min_freq_hz;
@@ -230,7 +230,7 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 	shaper_cfg.iir_2_r = ctx->plant.iir_2_r;
 
 	ctx->core_command_shaper_ops->process_and_actuate(&shaper_cfg, i,
-			rotor_position_command_steps, &rotor_control_target_steps,
+			ctx->rotor_pos.rotor_position_command_steps, &ctx->rotor_pos.rotor_control_target_steps,
 			&ctx->core_cmd_shaper_state, &ctx->core_ctl_out);
 }
 

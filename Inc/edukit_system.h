@@ -3,6 +3,9 @@
 
 
 
+#ifndef EDUKIT_SYSTEM_H
+#define EDUKIT_SYSTEM_H
+
 /*
  ******************************************************************************
  * @file    Multi/Examples/MotionControl/IHM01A1_ExampleFor1Motor/Src/main.c
@@ -529,85 +532,8 @@ extern char test_msg[128];
 /* Motor configuration */
 /* min_speed, max_speed, max_accel, max_decel → ctx fields */
 
-/* Control system output signal */
-extern float rotor_control_target_steps;
-/* rotor_control_target_steps_curr → write-only, removed */
-/* rotor_control_target_steps_prev → CommandShaperState field, no global (dangling extern removed) */
-
-/* Control system variables */
-/* rotor_position_delta, initial_rotor_position → never referenced, removed */
-/* i, j, k, m, ret → local in app_run_control_session() */
-
-/* PID control variables → ctx->gains (PidGainSet) */
-/* proportional, integral, derivative, rotor_p_gain/i/d → ctx->gains */
-/* enable_state_feedback, integral_compensator_gain, feedforward_gain → ctx->gains */
-/* Reference tracking command */
-extern float reference_tracking_command;
-
-/* Pendulum position and tracking command */
-
-/* Rotor position and tracking command */
-extern int rotor_position_steps;
-extern float rotor_position_command_steps;
-extern float rotor_position_command_steps_pf, rotor_position_command_steps_pf_prev;
-/* rotor_position_command_deg → ui.c static */
-extern float rotor_position_steps_prev, rotor_position_filter_steps, rotor_position_filter_steps_prev;
-extern float rotor_position_diff, rotor_position_diff_prev;
-extern float rotor_position_diff_filter, rotor_position_diff_filter_prev;
-/* rotor_target_in_steps, initial_rotor_position → never referenced, removed */
-
-/* Rotor Plant Design variables → ctx->plant (RotorPlantState) */
-/* rotor_control_target_steps_gain/filter_2/filter_prev_2/prev_prev/filter_prev_prev_2
-   → CommandShaperState fields, no globals (dangling externs removed) */
-
-/* Encoder position variables */
-/* cnt3, range_error → hardware.c static */
-extern float encoder_position;
-extern int encoder_position_steps;
-extern int encoder_position_init;
-/* previous_encoder_position, max/global/prev_global_max_encoder_position → hardware.c static */
-extern int encoder_position_down;
-/* encoder_position_curr, encoder_position_prev → local in app_run_control_session() */
-
-/* Angle calibration variables */
-extern float encoder_position_offset;
-extern float encoder_position_offset_zero;
-extern int enable_angle_cal;
-/* enable_angle_cal_resp → ui.c static */
-extern int offset_end_state;
-extern int offset_start_index;
-extern int angle_index;
-extern int angle_avg_index;
-extern int angle_avg_span;
-extern int offset_angle[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
-extern float encoder_position_offset_avg[ANGLE_CAL_OFFSET_STEP_COUNT + 2];
-extern int angle_cal_end;
-extern int angle_cal_complete;
-
-/* Swing Up system variables */
-/* enable_swing_up → ctx field */
-/* enable_swing_up_resp → ui.c static */
-/* peaked, handled_peak, zero_crossed,
-   max/global/prev_global_max/previous_encoder_position → hardware.c static (via hardware_swing_up_*) */
-/* swing_up_direction, swing_up_state/prev, stage_count, stage_amp → local in app_run_control_session() */
-
-/* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
-
-
-/* Slope correction system variables */
-/* slope, slope_prev → removed (write-only, never read) */
-extern float encoder_angle_slope_corr_steps;
-
-/* Adaptive control variables */
-/* adaptive_error, adaptive_threshold_low/high → write-only, removed */
-/* error_sum_prev/filter_prev, error_sum, error_sum_filter → write-only, removed */
-/* adaptive_entry_tick, adaptive_dwell_period → write-only, removed */
-/* enable_adaptive_mode, adaptive_state, adaptive_state_change → ctx fields */
-extern float rotor_position_command_steps_prev;
-
-/* Rotor impulse variables */
-extern int rotor_position_step_polarity;
-extern int impulse_start_index;
+/* Control system output, rotor position/filter/diff/command/impulse → ctx->rotor_pos (RotorPositionState) */
+/* Encoder position, angle calibration, slope correction → ctx->enc_cal (EncoderCalibState) */
 
 /* User configuration variables */
 /* clear_input → unreferenced, removed */
@@ -659,3 +585,5 @@ extern int impulse_start_index;
 /* CMSIS Variables: PID_Pend, PID_Rotor, Deriv_Filt_Pend, Deriv_Filt_Rotor, Wo_t, fo_t, IWon_t
    are ControllerState/ObserverState struct fields; no global definitions existed.
    Dangling extern declarations removed. Duplicate system timing section removed. */
+
+#endif /* EDUKIT_SYSTEM_H */

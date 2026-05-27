@@ -761,7 +761,7 @@ void user_configuration(AppControlContext *ctx){
 			ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
 			ctx->tracking.enable_rotor_chirp = 0;
 			ctx->tracking.enable_mod_sin_rotor_tracking = 1;
-			enable_angle_cal = 1;
+			ctx->enc_cal.enable_angle_cal = 1;
 			ctx->enable_swing_up = 1;
 			L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
 			break;
@@ -831,12 +831,12 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 						strlen(msg), HAL_MAX_DELAY);
 
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -972,12 +972,12 @@ void user_configuration(AppControlContext *ctx){
 				sprintf(msg, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -1096,12 +1096,12 @@ void user_configuration(AppControlContext *ctx){
 				sprintf(msg, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable................ ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -1228,12 +1228,12 @@ void user_configuration(AppControlContext *ctx){
 				sprintf(msg, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -1543,7 +1543,7 @@ void user_configuration(AppControlContext *ctx){
 				}
 
 				if ( ctx->select_suspended_mode == 1 ){
-					enable_angle_cal = 0;
+					ctx->enc_cal.enable_angle_cal = 0;
 				}
 
 				ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
@@ -1551,12 +1551,12 @@ void user_configuration(AppControlContext *ctx){
 				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
 				ctx->tracking.enable_rotor_chirp = 0;
 
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -2107,13 +2107,13 @@ void user_configuration(AppControlContext *ctx){
 
 				ctx->plant.enable_rotor_plant_design = 0;
 				ctx->plant.enable_rotor_plant_gain_design = 0;
-				enable_angle_cal = 0;
+				ctx->enc_cal.enable_angle_cal = 0;
 
 				sprintf(msg, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable ..............: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
-					enable_angle_cal = 1;
+					ctx->enc_cal.enable_angle_cal = 1;
 				}
 				sprintf(msg, "%i", enable_angle_cal_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -2401,7 +2401,7 @@ void user_configuration(AppControlContext *ctx){
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
 				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
 				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				enable_angle_cal = 1;
+				ctx->enc_cal.enable_angle_cal = 1;
 				L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
 				sprintf(msg, "\n\rDefault Mode 1 Configured");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
@@ -2447,9 +2447,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 		sprintf(msg, "\r\n\r\n********  Starting Rotor Motor Control Test  ********\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
-		(void)hardware_rotor_position_read(&rotor_position_steps);
+		(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 		sprintf(msg, "Motor Position at Zero Angle: %.2f\r\n",
-				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+				(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
 		sprintf(msg, "Next Test in 3s\r\n\r\n");
@@ -2460,9 +2460,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		(void)hardware_rotor_position_read(&rotor_position_steps);
+		(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 		sprintf(msg, "Motor Position Test to -45 Degree Angle: %.2f\r\n",
-				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+				(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
 		sprintf(msg, "Correct motion shows rotor rotating to left\r\n");
@@ -2476,9 +2476,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		(void)hardware_rotor_position_read(&rotor_position_steps);
+		(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 		sprintf(msg, "Motor Position Test to Zero Angle: %.2f\r\n",
-				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+				(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
 		sprintf(msg, "Correct motion shows rotor returning to zero angle\r\n");
@@ -2492,9 +2492,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		(void)hardware_rotor_position_read(&rotor_position_steps);
+		(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 		sprintf(msg, "Motor Position at 90 Degree Angle: %.2f\r\n",
-				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+				(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 		sprintf(msg, "Correct motion shows rotor rotating to right\r\n");
@@ -2508,9 +2508,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 		BSP_MotorControl_GoTo(0, (int)(rotor_position_command_deg*STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE));
 		BSP_MotorControl_WaitWhileActive(0);
 
-		(void)hardware_rotor_position_read(&rotor_position_steps);
+		(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 		sprintf(msg, "Motor Position at Zero Angle: %.2f\r\n",
-				(float) ((rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
+				(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),HAL_MAX_DELAY);
 
 		sprintf(msg, "Correct motion shows rotor rotating to zero angle\r\n");
@@ -2538,10 +2538,10 @@ void rotor_encoder_test(AppControlContext *ctx){
 				HAL_MAX_DELAY);
 		HAL_Delay(3000);
 
-		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
-		encoder_position_down = encoder_position;
+		(void)hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init, &htim3);
+		ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position;
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees))\r\n\r\n",
-				(float) (encoder_position_down / ctx->angle_scale));
+				(float) (ctx->enc_cal.encoder_position_down / ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
 
@@ -2554,9 +2554,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 				HAL_MAX_DELAY);
 		HAL_Delay(10000);
 
-		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
+		(void)hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f\r\n(Correct value should lie between -359.5 and -360.5 degrees)\r\n\r\n",
-				(float) ((encoder_position_steps - encoder_position_down)
+				(float) ((ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down)
 						/ ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
@@ -2570,9 +2570,9 @@ void rotor_encoder_test(AppControlContext *ctx){
 				HAL_MAX_DELAY);
 		HAL_Delay(10000);
 
-		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
+		(void)hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees) \r\n\r\n",
-				(float) ((encoder_position_steps - encoder_position_down)
+				(float) ((ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down)
 						/ ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
@@ -2809,7 +2809,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 					* (float) (i) / rotor_chirp_step_period;
 
 			if (mode_index == 1) {
-				rotor_position_command_steps =
+				ctx->rotor_pos.rotor_position_command_steps =
 						rotor_chirp_amplitude
 						* (float) (STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE)
 						* sin(
@@ -2826,12 +2826,12 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				} else {
 					k = 1;
 				}
-				rotor_position_command_steps = k * rotor_chirp_amplitude
+				ctx->rotor_pos.rotor_position_command_steps = k * rotor_chirp_amplitude
 						* STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
 			}
 
 			current_speed = BSP_MotorControl_GetCurrentSpeed(0);
-			BSP_MotorControl_GoTo(0, (int) (rotor_position_command_steps));
+			BSP_MotorControl_GoTo(0, (int) (ctx->rotor_pos.rotor_position_command_steps));
 
 			if (BSP_MotorControl_GetDeviceState(0) == ACCELERATING) {
 				motor_state = 1;
@@ -2845,14 +2845,14 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 			if (BSP_MotorControl_GetDeviceState(0) == INACTIVE) {
 				motor_state = 0;
 			}
-			(void)hardware_rotor_position_read(&rotor_position_steps);
+			(void)hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
 			current_speed = BSP_MotorControl_GetCurrentSpeed(0);
 			sprintf(msg,
 					"%i\t%i\t%i\t%i\t%i\t%f\t%i\t%i\t%i\t%i\t%i\r\n", i,
 					ctx->timing.cycle_period_sum,
 					(int) (ctx->timing.tick_cycle_current - ctx->timing.tick_cycle_previous),
-					current_speed, rotor_position_steps,
-					rotor_position_command_steps, motor_state,
+					current_speed, ctx->rotor_pos.rotor_position_steps,
+					ctx->rotor_pos.rotor_position_command_steps, motor_state,
 					rotor_test_speed_max, rotor_test_speed_min,
 					rotor_test_acceleration_max, swing_deceleration_max);
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
@@ -2880,6 +2880,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 
 void interactive_rotor_actuator_control(void){
 	int j;
+	int rotor_position_steps;
 	while (1) {
 
 		/*
