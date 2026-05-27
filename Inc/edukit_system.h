@@ -542,12 +542,7 @@ extern float rotor_control_target_steps_curr;
 /* rotor_position_delta, initial_rotor_position → never referenced, removed */
 /* i, j, k, m, ret → local in app_run_control_session() */
 
-/* PID control system variables */
-extern float *sample_period, *sample_period_rotor;
-
 /* PID control variables */
-extern float *deriv_lp_corner_f;
-extern float *deriv_lp_corner_f_rotor;
 extern float proportional, rotor_p_gain;
 extern float integral, rotor_i_gain;
 extern float derivative, rotor_d_gain;
@@ -614,12 +609,6 @@ extern int enable_swing_up;
 
 /* init_r_*, init_p_*, init_enable_* → ctx->init_params in AppControlContext */
 
-
-/* Low pass filter variables */
-extern float fo, Wo, IWon, iir_0, iir_1, iir_2;
-extern float fo_LT, Wo_LT, IWon_LT;
-extern float iir_LT_0, iir_LT_1, iir_LT_2;
-extern float fo_s, Wo_s, IWon_s, iir_0_s, iir_1_s, iir_2_s;
 
 /* Slope correction system variables */
 /* slope, slope_prev → removed (write-only, never read) */

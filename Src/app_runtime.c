@@ -19,7 +19,7 @@ int control_execute_cycle(AppControlContext *ctx, int i)
 		return 1;
 	}
 
-	control_update_slope_correction(i);
+	control_update_slope_correction(ctx, i);
 	control_prepare_targets_and_filters(ctx, i);
 
 	if (ENABLE_DUAL_PID == 1) {
@@ -47,9 +47,9 @@ static void control_prepare_targets_and_filters(AppControlContext *ctx, int i)
 	ctx->core_ctl_target.pendulum_cmd_steps = pendulum_position_command_steps;
 	ctx->core_ctl_target.pendulum_angle_ref_rad = 0.0f;
 
-	rotor_position_filter_steps = (float) (rotor_position_steps) * iir_0
-			+ rotor_position_steps_prev * iir_1
-			- rotor_position_filter_steps_prev * iir_2;
+	rotor_position_filter_steps = (float) (rotor_position_steps) * ctx->lpf.iir_0
+			+ rotor_position_steps_prev * ctx->lpf.iir_1
+			- rotor_position_filter_steps_prev * ctx->lpf.iir_2;
 	rotor_position_steps_prev = (float) (rotor_position_steps);
 	rotor_position_filter_steps_prev = rotor_position_filter_steps;
 
@@ -258,9 +258,9 @@ static void reference_update(AppControlContext *ctx, int i)
 	if (enable_rotor_position_step_response_cycle == 1
 			&& enable_mod_sin_rotor_tracking == 0
 			&& enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
-		rotor_position_command_steps = rotor_position_command_steps_pf * iir_0_s
-				+ rotor_position_command_steps_pf_prev * iir_1_s
-				- ctx->core_cmd_shaper_state.rotor_position_command_steps_prev * iir_2_s;
+		rotor_position_command_steps = rotor_position_command_steps_pf * ctx->lpf.iir_0_s
+				+ rotor_position_command_steps_pf_prev * ctx->lpf.iir_1_s
+				- ctx->core_cmd_shaper_state.rotor_position_command_steps_prev * ctx->lpf.iir_2_s;
 		rotor_position_command_steps_pf_prev = rotor_position_command_steps_pf;
 	}
 }

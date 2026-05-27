@@ -38,6 +38,12 @@ typedef struct {
 	int enable_cycle_delay_warning;
 } LoopTimingState;
 
+typedef struct {
+	float iir_0, iir_1, iir_2;           /* rotor position LP filter */
+	float iir_LT_0, iir_LT_1, iir_LT_2; /* long-term LP filter */
+	float iir_0_s, iir_1_s, iir_2_s;    /* step-response LP filter */
+} RotorFilterState;
+
 typedef struct AppControlContext {
 	SensorRaw core_hw_raw;
 	SensorCalib core_hw_cal;
@@ -49,6 +55,7 @@ typedef struct AppControlContext {
 	CommandShaperState core_cmd_shaper_state;
 	SessionInitialParams init_params;
 	LoopTimingState timing;
+	RotorFilterState lpf;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
@@ -63,7 +70,7 @@ void app_init_control_pipeline(AppControlContext *ctx, int encoder_init_counts,
 void control_shutdown_sequence(AppControlContext *ctx);
 int control_handle_runtime_configuration(AppControlContext *ctx, int i);
 int control_update_state_and_safety(AppControlContext *ctx);
-void control_update_slope_correction(int i);
+void control_update_slope_correction(AppControlContext *ctx, int i);
 void control_update_dual_pid(AppControlContext *ctx);
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i);
 int control_wait_next_cycle(AppControlContext *ctx);

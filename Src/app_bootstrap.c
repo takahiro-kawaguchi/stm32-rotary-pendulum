@@ -115,35 +115,34 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 				HAL_MAX_DELAY);
 	}
 
-	*deriv_lp_corner_f = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY;
-	*deriv_lp_corner_f_rotor = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY_ROTOR;
 	ctx->timing.t_sample_cpu_cycles = (uint32_t) round(T_SAMPLE_DEFAULT * RCC_HCLK_FREQ);
 	Tsample = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
-	*sample_period = Tsample;
 	Tsample_rotor = Tsample;
-	*sample_period_rotor = Tsample_rotor;
 	assert(RCC_SYS_CLOCK_FREQ == HAL_RCC_GetSysClockFreq());
 	assert(RCC_HCLK_FREQ == HAL_RCC_GetHCLKFreq());
 
 
-	fo = LP_CORNER_FREQ_ROTOR;
-	Wo = 2 * 3.141592654 * fo;
-	IWon = 2 / (Wo * Tsample);
-	iir_0 = 1 / (1 + IWon);
-	iir_1 = iir_0;
-	iir_2 = iir_0 * (1 - IWon);
-	fo_s = LP_CORNER_FREQ_STEP;
-	Wo_s = 2 * 3.141592654 * fo_s;
-	IWon_s = 2 / (Wo_s * Tsample);
-	iir_0_s = 1 / (1 + IWon_s);
-	iir_1_s = iir_0_s;
-	iir_2_s = iir_0_s * (1 - IWon_s);
-	fo_LT = LP_CORNER_FREQ_LONG_TERM;
-	Wo_LT = 2 * 3.141592654 * fo_LT;
-	IWon_LT = 2 / (Wo_LT * Tsample);
-	iir_LT_0 = 1 / (1 + IWon_LT);
-	iir_LT_1 = iir_LT_0;
-	iir_LT_2 = iir_LT_0 * (1 - IWon_LT);
+	{
+		float fo, Wo, IWon;
+		fo = LP_CORNER_FREQ_ROTOR;
+		Wo = 2 * 3.141592654 * fo;
+		IWon = 2 / (Wo * Tsample);
+		ctx->lpf.iir_0 = 1 / (1 + IWon);
+		ctx->lpf.iir_1 = ctx->lpf.iir_0;
+		ctx->lpf.iir_2 = ctx->lpf.iir_0 * (1 - IWon);
+		fo = LP_CORNER_FREQ_STEP;
+		Wo = 2 * 3.141592654 * fo;
+		IWon = 2 / (Wo * Tsample);
+		ctx->lpf.iir_0_s = 1 / (1 + IWon);
+		ctx->lpf.iir_1_s = ctx->lpf.iir_0_s;
+		ctx->lpf.iir_2_s = ctx->lpf.iir_0_s * (1 - IWon);
+		fo = LP_CORNER_FREQ_LONG_TERM;
+		Wo = 2 * 3.141592654 * fo;
+		IWon = 2 / (Wo * Tsample);
+		ctx->lpf.iir_LT_0 = 1 / (1 + IWon);
+		ctx->lpf.iir_LT_1 = ctx->lpf.iir_LT_0;
+		ctx->lpf.iir_LT_2 = ctx->lpf.iir_LT_0 * (1 - IWon);
+	}
 
 	tick_read_cycle_start = HAL_GetTick();
 	sprintf(msg, "\n\rSystem Starting Prepare to Enter Mode Selection... ");

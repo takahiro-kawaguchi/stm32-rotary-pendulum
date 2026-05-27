@@ -151,7 +151,7 @@ int control_update_state_and_safety(AppControlContext *ctx)
 	return 0;
 }
 
-void control_update_slope_correction(int i)
+void control_update_slope_correction(AppControlContext *ctx, int i)
 {
 	rotor_position_diff_prev = rotor_position_diff;
 
@@ -164,8 +164,8 @@ void control_update_slope_correction(int i)
 
 	if (ENABLE_ENCODER_ANGLE_SLOPE_CORRECTION == 1 && i > angle_cal_complete) {
 		rotor_position_diff_filter =
-				(float) (rotor_position_diff * iir_LT_0) + rotor_position_diff_prev * iir_LT_1
-						- rotor_position_diff_filter_prev * iir_LT_2;
+				(float) (rotor_position_diff * ctx->lpf.iir_LT_0) + rotor_position_diff_prev * ctx->lpf.iir_LT_1
+						- rotor_position_diff_filter_prev * ctx->lpf.iir_LT_2;
 		if ((i < ENCODER_ANGLE_SLOPE_CORRECTION_CYCLE_LIMIT)
 				|| (ENCODER_ANGLE_SLOPE_CORRECTION_CYCLE_LIMIT == 0)) {
 			encoder_angle_slope_corr_steps =
@@ -184,7 +184,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 	input.feedforward_gain = feedforward_gain;
 	input.integral_compensator_gain = integral_compensator_gain;
 	input.load_disturbance_sensitivity_scale = load_disturbance_sensitivity_scale;
-	input.sample_period_rotor_s = *sample_period_rotor;
+	input.sample_period_rotor_s = Tsample_rotor;
 	input.enable_state_feedback = enable_state_feedback;
 	input.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
 	input.enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
