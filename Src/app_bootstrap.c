@@ -10,10 +10,6 @@
 
 void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 {
-	RxBuffer_ReadIdx = 0;
-	RxBuffer_WriteIdx = 0;
-	readBytes = 0;
-
 	encoder_position = 0;
 	encoder_position_down = 0;
 	angle_scale = ENCODER_READ_ANGLE_SCALE;
@@ -40,11 +36,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	enable_sensitivity_fnc_step = 0;
 	enable_pendulum_position_impulse_response_cycle = 0;
 
-	step_size = 0;
 	adjust_increment = 0.5;
 	mode_transition_state = 0;
-	transition_to_adaptive_mode = 0;
-	char_mode_select = 0;
 
 	HAL_Init();
 	SystemClock_Config();

@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static int display_parameter;
+
 static void reference_update(AppControlContext *ctx, int i);
 static void angle_cal_update(AppControlContext *ctx, int i);
 static void report_data(AppControlContext *ctx, int i);

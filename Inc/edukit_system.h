@@ -465,10 +465,7 @@ extern volatile uint16_t gLastError;
 extern void MyFlagInterruptHandler(void);
 extern void MX_TIM3_Init(void);
 extern void MX_USART2_UART_Init(void);
-extern void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return);
 extern void Error_Handler(uint16_t error);
-extern void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, int * int_return);
-extern void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, char * char_return);
 extern void select_mode_1(void);
 extern void user_configuration(void);
 extern int Delay_Pulse();
@@ -541,11 +538,6 @@ extern int reset_state;
 
 /* Motor configuration */
 extern uint16_t min_speed, max_speed, max_accel, max_decel;
-
-/* Serial interface variables */
-extern uint32_t RxBuffer_ReadIdx;
-extern uint32_t RxBuffer_WriteIdx;
-extern uint32_t readBytes;
 
 /* Control system output signal */
 extern float rotor_control_target_steps;
@@ -742,27 +734,16 @@ extern float noise_rej_signal;
  * Real time user input system variables
  */
 
-extern char config_message[16];
-extern int config_command;
-extern int display_parameter;
-extern int step_size;
 extern float adjust_increment;
-extern int mode_index;
-
 /* Real time data reporting index */
 extern int report_mode;
 extern int speed_scale;
 extern int speed_governor;
 
-extern int mode_interactive;	// Enable continued terminal interactive user session
 /* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → ui.c (static) */
 /* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
 /* mode_transition_tick → never used, removed */
 extern int mode_transition_state;
-extern int transition_to_adaptive_mode;
-
-
-extern int char_mode_select;	// Flag detecting whether character mode select entered
 
 
 /* message_received → never referenced, removed */

@@ -4,10 +4,6 @@
 #include <stdint.h>
 /* stm32f4xx_hal.h and edukit_system.h must be included before this header */
 
-void read_float(uint32_t *RxBuffer_ReadIdx, uint32_t *RxBuffer_WriteIdx, uint32_t *readBytes, float *float_return);
-void read_int(uint32_t *RxBuffer_ReadIdx, uint32_t *RxBuffer_WriteIdx, uint32_t *readBytes, int *int_return);
-void read_char(uint32_t *RxBuffer_ReadIdx, uint32_t *RxBuffer_WriteIdx, uint32_t *readBytes, char *char_return);
-
 void assign_mode_1(arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
 void assign_mode_2(arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
 void assign_mode_3(arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
@@ -18,7 +14,8 @@ int  mode_index_identification(char *user_config_input, int config_command_contr
 
 void set_mode_strings(void);
 void user_prompt(void);
-void get_user_mode_index(char *user_string, int *char_mode_select, int *mode_index, int *mode_interactive);
+void ui_set_mode_interactive(int enabled);
+int ui_get_mode_interactive(void);
 void user_configuration(void);
 int ui_process_runtime_input(int cycle_index,
         arm_pid_instance_a_f32 *PID_Pend,

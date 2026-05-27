@@ -8,6 +8,12 @@
 #include <stdlib.h>
 
 /* UI-private mode selection state (moved from main.c) -------------------- */
+static char config_message[16];
+static int config_command;
+static int mode_index = 1;
+static int char_mode_select;
+static int mode_interactive;
+static int step_size;
 static int mode_1, mode_2, mode_3, mode_4, mode_5;
 static int mode_adaptive_off, mode_adaptive;
 static int mode_8, mode_9, mode_10, mode_11, mode_13, mode_15;
@@ -90,9 +96,12 @@ static int enable_encoder_test;
 static int motor_state;
 static float rotor_chirp_amplitude;
 static int rotor_chirp_step_period;
+static uint32_t RxBuffer_ReadIdx;
+static uint32_t RxBuffer_WriteIdx;
+static uint32_t readBytes;
 /* ----------------------------------------------------------------------- */
 
-void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return) {
+static void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, float *float_return) {
 
 	int k;
 
@@ -115,7 +124,7 @@ void read_float(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint
 	}
 }
 
-void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, int * int_return) {
+static void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, int * int_return) {
 
 	int k;
 
@@ -139,7 +148,7 @@ void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32
 	}
 }
 
-void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, char * char_return) {
+static void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, char * char_return) {
 
 	int k;
 
@@ -608,7 +617,17 @@ void user_prompt(void){
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 }
 
-void get_user_mode_index(char * user_string, int * char_mode_select, int * mode_index, int * mode_interactive){
+void ui_set_mode_interactive(int enabled)
+{
+	mode_interactive = enabled;
+}
+
+int ui_get_mode_interactive(void)
+{
+	return mode_interactive;
+}
+
+static void get_user_mode_index(char * user_string, int * char_mode_select, int * mode_index){
 
 	*char_mode_select = 0;
 
@@ -658,32 +677,32 @@ void get_user_mode_index(char * user_string, int * char_mode_select, int * mode_
 
 	case 8:
 		*mode_index = mode_8;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	case 10:
 		*mode_index = mode_10;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	case 11:
 		*mode_index = mode_11;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	case 13:
 		*mode_index = mode_13;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	case 15:
 		*mode_index = mode_15;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	case 19:
 		*mode_index = mode_19;
-		*mode_interactive = 1;
+		mode_interactive = 1;
 		break;
 
 	default:
@@ -759,7 +778,7 @@ void user_configuration(void){
 			sprintf(msg, "%s", (char*)Msg.Data);
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-			get_user_mode_index((char*)Msg.Data, &char_mode_select, &mode_index, &mode_interactive);
+			get_user_mode_index((char*)Msg.Data, &char_mode_select, &mode_index);
 
 			/*
 			 * Configure Motor Speed Profile and PID Controller Gains

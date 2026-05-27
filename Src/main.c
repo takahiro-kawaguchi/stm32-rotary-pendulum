@@ -140,7 +140,6 @@
 #include "controller.h"
 #include "command_shaper.h"
 #include "app_control.h"
-#include "app_runtime.h"
 #include "app_bootstrap.h"
 #include "app_session.h"
 #include "ui.h"
@@ -417,26 +416,17 @@ float noise_rej_signal;
  * Real time user input system variables
  */
 
-char config_message[16];
-int config_command;
-int display_parameter;
-int step_size;
 float adjust_increment;
-int mode_index;
 
 /* Real time data reporting index */
 int report_mode;
 int speed_scale;
 int speed_governor;
 
-int mode_interactive;	// Enable continued terminal interactive user session
 /* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → moved to ui.c (static) */
 /* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
 /* mode_transition_tick → never used, removed */
 int mode_transition_state;
-int transition_to_adaptive_mode;
-
-int char_mode_select;	// Flag detecting whether character mode select entered
 
 
 /* message_received → never referenced, removed */
@@ -462,15 +452,7 @@ int reset_state;
 /* Motor configuration */
 uint16_t min_speed, max_speed, max_accel, max_decel;
 
-/* Serial interface variables */
-uint32_t RxBuffer_ReadIdx;
-uint32_t RxBuffer_WriteIdx;
-uint32_t readBytes;
-
-
 int main(void) {
-	int k;
-
 	/* Initialize reset state indicating that reset has occurred */
 
 	reset_state = 1;
@@ -492,169 +474,11 @@ int main(void) {
 	target_velocity_prescaled = 0;
 
 	/* Initialize default start mode and reporting mode */
-	mode_index = 1;
 	report_mode = 1;
 
 	app_bootstrap_system(&g_app, &gL6474InitParams);
-
-	while (1) {
-
-		mode_interactive = 0;
-		user_prompt();
-
-		/*
-		 * If user has responded to previous query for configuration, then system remains in interactive mode
-		 * and default state is not automatically enabled
-		 */
-
-
-		if (mode_interactive == 0) {
-			sprintf(msg, "\n\rEnter Mode Selection Now or System Will Start in Default Mode in 5 Seconds..: ");
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-		}
-
-		/*
-		 * If user has responded to query for configuration, then system remains in interactive mode
-		 * and default state is not automatically enabled
-		 */
-
-		if (mode_interactive == 1) {
-			sprintf(msg, "\n\rEnter Mode Selection Now: \n\r");
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-		}
-
-		/* Flush read buffer  */
-		for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
-		/* Start timer for configuration command read loop */
-		tick_read_cycle_start = HAL_GetTick();
-		/* Configuration command read loop */
-		user_configuration();
-
-		/* Set Motor Speed Profile and torque current */
-		BSP_MotorControl_SoftStop(0);
-		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
-		BSP_MotorControl_SetMaxSpeed(0, max_speed);
-		BSP_MotorControl_SetMinSpeed(0, min_speed);
-		BSP_MotorControl_SetAcceleration(0, MAX_ACCEL);
-		BSP_MotorControl_SetDeceleration(0, MAX_DECEL);
-
-		/* Report configuration values */
-		if (ACCEL_CONTROL == 0){
-		sprintf(msg, "\n\rMotor Profile Speeds Set at Min %u Max %u Steps per Second",
-				min_speed, max_speed);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg,
-				strlen(msg), HAL_MAX_DELAY);
-		}
-			if (select_suspended_mode == 0){
-		sprintf(msg, "\n\rInverted Pendulum Mode Selected");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg,
-				strlen(msg), HAL_MAX_DELAY);
-			}
-			if (select_suspended_mode == 1){
-		sprintf(msg, "\n\rSuspended Pendulum Mode Selected");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg,
-				strlen(msg), HAL_MAX_DELAY);
-			}
-
-		sprintf(msg, "\n\rMotor Torque Current Set at %0.1f mA",
-				torq_current_val);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg,
-				strlen(msg), HAL_MAX_DELAY);
-
-		/* Motor Control Characterization Test*/
-		if (enable_motor_actuator_characterization_mode == 1) {
-			motor_actuator_characterization_mode();
-		}
-		/* Interactive digital motor control system */
-		if (enable_rotor_actuator_control == 1) {
-			interactive_rotor_actuator_control();
-		}
-
-		/*
-		 * 	Rotor and Encoder Test Sequence will execute by moving rotor and reportin angle values
-		 * 	as well as requesting pendulum motion followed by reporting of pendulum angles
-		 *
-		 * 	Agreement between actions and reported values confirms proper installation of actuator
-		 * 	and pendulum encoder.
-		 *
-		 */
-
-		if (enable_rotor_actuator_test == 1) {
-			rotor_encoder_test();
-		}
-
-		/*
-		 * Configure Primary and Secondary PID controller data structures
-		 * Scale by CONTROLLER_GAIN_SCALE set to default value of unity
-		 */
-
-
-		app_assign_pid_gains_from_user(&g_app);
-
-		integral_compensator_gain = integral_compensator_gain * CONTROLLER_GAIN_SCALE;
-
-		/* Assign Rotor Plant Design variable values */
-
-
-		/* Transfer function model of form 1/(s^2 + 2*Damping_Coefficient*Wn*s + Wn^2) */
-		if (rotor_damping_coefficient != 0 || rotor_natural_frequency != 0){
-			Wn2 = rotor_natural_frequency * rotor_natural_frequency;
-			rotor_plant_gain = rotor_plant_gain * Wn2;
-			ao = ((2.0F/Tsample)*(2.0F/Tsample) + (2.0F/Tsample)*2.0F*rotor_damping_coefficient*rotor_natural_frequency
-					+ rotor_natural_frequency*rotor_natural_frequency);
-			c0 = ((2.0F/Tsample)*(2.0F/Tsample)/ao);
-			c1 = -2.0F * c0;
-			c2 = c0;
-			c3 = -(2.0F*rotor_natural_frequency*rotor_natural_frequency - 2.0F*(2.0F/Tsample)*(2.0F/Tsample))/ao;
-			c4 = -((2.0F/Tsample)*(2.0F/Tsample) - (2.0F/Tsample)*2.0F*rotor_damping_coefficient*rotor_natural_frequency
-					+ rotor_natural_frequency*rotor_natural_frequency)/ao;
-		}
-
-		/* Transfer function model of form 1/(s^2 + Wn*s) */
-		if (enable_rotor_plant_design == 2){
-			IWon_r = 2 / (Wo_r * Tsample);
-			iir_0_r = 1 - (1 / (1 + IWon_r));
-			iir_1_r = -iir_0_r;
-			iir_2_r = (1 / (1 + IWon_r)) * (1 - IWon_r);
-		}
-
-		/* Optional Transfer function model of form Wn/(s^3 + Wn*s^2)
-		if (enable_rotor_plant_design == 3 && enable_state_feedback == 0){
-		      IWon_r = 2 / (Wo_r * Tsample);
-		      iir_0_r = 1 / (1 + IWon_r);
-		      iir_1_r = iir_0_r;
-		      iir_2_r = iir_0_r * (1 - IWon_r);
-		}
-		*/
-
-		/*
-
-		//Optional display coefficients for rotor plant design transfer function
-		sprintf(tmp_string, "\n\rEnable Design: %i iir_0 %0.4f iir_1 %0.4f iir_2 %0.4f\n\r", enable_rotor_plant_design, iir_0_r, iir_1_r, iir_2_r);
-		HAL_UART_Transmit(&huart2, (uint8_t*) tmp_string, strlen(tmp_string), HAL_MAX_DELAY);
-
-
-		//Optional display coefficients for rotor plant design transfer function
-		sprintf(tmp_string,
-				"\n\ra0 %0.4f c0 %0.4f c1 %0.4f c2 %0.4f c3 %0.4f c4 %0.4f\n\r", ao, c0, c1, c2, c3, c4);
-		HAL_UART_Transmit(&huart2, (uint8_t*) tmp_string, strlen(tmp_string), HAL_MAX_DELAY);
-
-		 */
-
-
-		/*
-		 * *************************************************************************************************
-		 *
-		 * Control System Initialization Sequence
-		 *
-		 * *************************************************************************************************
-		 */
-
-		/* Run one full control session (init + run + shutdown) then restart */
-		app_run_control_session(&g_app);
-
-	}
+	app_run_mode_loop(&g_app);
+	return 0;
 }
 
 /*
