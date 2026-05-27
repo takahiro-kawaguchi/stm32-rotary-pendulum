@@ -621,32 +621,8 @@ extern int impulse_start_index;
 /* motor_state → ui.c static */
 
 
-/* Rotor chirp system variables */
-extern int enable_rotor_chirp;
-extern int chirp_cycle;
-extern int chirp_dwell_cycle;
-extern float chirp_time;
-extern float rotor_chirp_start_freq;
-extern float rotor_chirp_end_freq;
-extern float rotor_chirp_period ;
-extern float rotor_chirp_frequency;
+/* Rotor chirp, sine tracking, sysid, comb drive → ctx->tracking (RotorTrackingState) */
 /* rotor_chirp_amplitude, rotor_chirp_step_period → ui.c static */
-
-extern float pendulum_position_command_steps;
-
-/* Modulates sine tracking signal system variables */
-extern int enable_mod_sin_rotor_tracking;
-extern int enable_rotor_position_step_response_cycle;
-extern int disable_mod_sin_rotor_tracking;
-extern int sine_drive_transition;
-extern float mod_sin_amplitude;
-extern float rotor_control_sin_amplitude;
-extern float rotor_sine_drive, rotor_sine_drive_mod;
-extern float rotor_mod_control;
-extern float mod_sin_carrier_frequency;
-
-/* Pendulum impulse system variables */
-extern int enable_pendulum_position_impulse_response_cycle;
 
 /* Rotor high speed test system variables */
 /* swing_cycles, start/end_angle_a, motion_dwell_a,
@@ -659,17 +635,6 @@ extern int enable_pendulum_position_impulse_response_cycle;
 
 /* Full system identification variables */
 /* enable_full_sysid, full_sysid_max_freq_hz → ui.c static */
-extern float full_sysid_max_vel_amplitude_deg_per_s;
-extern float full_sysid_min_freq_hz;
-extern int full_sysid_num_freqs;
-extern float full_sysid_freq_log_step;
-extern int full_sysid_start_index;
-
-/* Rotor comb drive system variables */
-extern int enable_rotor_tracking_comb_signal;
-extern float rotor_track_comb_signal_frequency;
-extern float rotor_track_comb_command;
-extern float rotor_track_comb_amplitude;
 
 /* Sensitivity function system variables → ctx->gains (PidGainSet) */
 /* enable_disturbance_rejection_step, enable_noise_rejection_step → ctx->gains */

@@ -81,6 +81,38 @@ typedef struct {
 	float iir_0_s, iir_1_s, iir_2_s;    /* step-response LP filter */
 } RotorFilterState;
 
+typedef struct {
+	int   enable_rotor_chirp;
+	int   chirp_cycle;
+	int   chirp_dwell_cycle;
+	float chirp_time;
+	float rotor_chirp_start_freq;
+	float rotor_chirp_end_freq;
+	float rotor_chirp_period;
+	float rotor_chirp_frequency;
+	float pendulum_position_command_steps;
+	int   enable_mod_sin_rotor_tracking;
+	int   enable_rotor_position_step_response_cycle;
+	int   disable_mod_sin_rotor_tracking;
+	int   sine_drive_transition;
+	float mod_sin_amplitude;
+	float rotor_control_sin_amplitude;
+	float rotor_sine_drive;
+	float rotor_sine_drive_mod;
+	float rotor_mod_control;
+	float mod_sin_carrier_frequency;
+	int   enable_pendulum_position_impulse_response_cycle;
+	float full_sysid_max_vel_amplitude_deg_per_s;
+	float full_sysid_min_freq_hz;
+	int   full_sysid_num_freqs;
+	float full_sysid_freq_log_step;
+	int   full_sysid_start_index;
+	int   enable_rotor_tracking_comb_signal;
+	float rotor_track_comb_signal_frequency;
+	float rotor_track_comb_command;
+	float rotor_track_comb_amplitude;
+} RotorTrackingState;
+
 typedef struct AppControlContext {
 	SensorRaw core_hw_raw;
 	SensorCalib core_hw_cal;
@@ -94,6 +126,7 @@ typedef struct AppControlContext {
 	LoopTimingState timing;
 	RotorFilterState lpf;
 	RotorPlantState plant;
+	RotorTrackingState tracking;
 	PidGainSet gains;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	float angle_scale;

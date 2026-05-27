@@ -210,11 +210,11 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 	shaper_cfg.sample_period_s = ctx->timing.Tsample;
 	shaper_cfg.accel_control = ACCEL_CONTROL;
 	shaper_cfg.angle_cal_complete = angle_cal_complete;
-	shaper_cfg.full_sysid_start_index = full_sysid_start_index;
-	shaper_cfg.full_sysid_max_vel_amplitude_deg_per_s = full_sysid_max_vel_amplitude_deg_per_s;
-	shaper_cfg.full_sysid_min_freq_hz = full_sysid_min_freq_hz;
-	shaper_cfg.full_sysid_num_freqs = full_sysid_num_freqs;
-	shaper_cfg.full_sysid_freq_log_step = full_sysid_freq_log_step;
+	shaper_cfg.full_sysid_start_index = ctx->tracking.full_sysid_start_index;
+	shaper_cfg.full_sysid_max_vel_amplitude_deg_per_s = ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s;
+	shaper_cfg.full_sysid_min_freq_hz = ctx->tracking.full_sysid_min_freq_hz;
+	shaper_cfg.full_sysid_num_freqs = ctx->tracking.full_sysid_num_freqs;
+	shaper_cfg.full_sysid_freq_log_step = ctx->tracking.full_sysid_freq_log_step;
 	shaper_cfg.enable_rotor_plant_design = ctx->plant.enable_rotor_plant_design;
 	shaper_cfg.enable_rotor_plant_gain_design = ctx->plant.enable_rotor_plant_gain_design;
 	shaper_cfg.rotor_plant_gain = ctx->plant.rotor_plant_gain;

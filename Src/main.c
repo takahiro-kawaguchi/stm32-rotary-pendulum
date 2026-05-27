@@ -309,55 +309,10 @@ int impulse_start_index;
 /* enable_motor_actuator_characterization_mode, torq_current_val → ctx fields */
 
 
-/* Rotor chirp system variables */
-int enable_rotor_chirp;
-int chirp_cycle;
-int chirp_dwell_cycle;
-float chirp_time;
-float rotor_chirp_start_freq;
-float rotor_chirp_end_freq;
-float rotor_chirp_period ;
-float rotor_chirp_frequency;
-/* rotor_chirp_amplitude, rotor_chirp_step_period → ui.c static */
-
-float pendulum_position_command_steps;
-
-/* Modulates sine tracking signal system variables */
-int enable_mod_sin_rotor_tracking;
-int enable_rotor_position_step_response_cycle;
-int disable_mod_sin_rotor_tracking;
-int sine_drive_transition;
-float mod_sin_amplitude;
-float rotor_control_sin_amplitude;
-float rotor_sine_drive, rotor_sine_drive_mod;
-float rotor_mod_control;
-float mod_sin_carrier_frequency;
-
-/* Pendulum impulse system variables */
-int enable_pendulum_position_impulse_response_cycle;
-
-/* Rotor high speed test system variables */
-/* swing_cycles, start/end_angle_a, motion_dwell_a,
-   abs_encoder_position_prior/after/max → removed (never referenced) */
+/* Rotor chirp, sine tracking, sysid, comb drive → ctx->tracking (RotorTrackingState) */
 /* rotor_test_speed_min/max, rotor_test_acceleration_max, swing_deceleration_max,
    current_speed → ui.c static */
-
-/*Pendulum system ID variable */
-/* enable_pendulum_sysid_test → ui.c static */
-
-/* Full system identification variables */
-/* enable_full_sysid, full_sysid_max_freq_hz → ui.c static */
-float full_sysid_max_vel_amplitude_deg_per_s;
-float full_sysid_min_freq_hz;
-int full_sysid_num_freqs;
-float full_sysid_freq_log_step;
-int full_sysid_start_index;
-
-/* Rotor comb drive system variables */
-int enable_rotor_tracking_comb_signal;
-float rotor_track_comb_signal_frequency;
-float rotor_track_comb_command;
-float rotor_track_comb_amplitude;
+/* enable_pendulum_sysid_test, enable_full_sysid, full_sysid_max_freq_hz → ui.c static */
 
 /* Sensitivity function system variables → ctx->gains (PidGainSet) */
 

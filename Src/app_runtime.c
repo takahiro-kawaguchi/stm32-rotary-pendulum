@@ -41,10 +41,10 @@ static void control_prepare_targets_and_filters(AppControlContext *ctx, int i)
 			+ ENCODER_ANGLE_POLARITY
 					* (encoder_position / ((float) (ENCODER_READ_ANGLE_SCALE
 							/ STEPPER_READ_POSITION_STEPS_PER_DEGREE)));
-	current_error_steps = current_error_steps + pendulum_position_command_steps;
+	current_error_steps = current_error_steps + ctx->tracking.pendulum_position_command_steps;
 
 	ctx->core_ctl_target.slope_correction_steps = encoder_angle_slope_corr_steps;
-	ctx->core_ctl_target.pendulum_cmd_steps = pendulum_position_command_steps;
+	ctx->core_ctl_target.pendulum_cmd_steps = ctx->tracking.pendulum_position_command_steps;
 	ctx->core_ctl_target.pendulum_angle_ref_rad = 0.0f;
 
 	rotor_position_filter_steps = (float) (rotor_position_steps) * ctx->lpf.iir_0
@@ -61,133 +61,133 @@ static void control_prepare_targets_and_filters(AppControlContext *ctx, int i)
 
 static void reference_update(AppControlContext *ctx, int i)
 {
-	if (enable_rotor_chirp == 1 && enable_mod_sin_rotor_tracking == 0
-			&& enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
+	if (ctx->tracking.enable_rotor_chirp == 1 && ctx->tracking.enable_mod_sin_rotor_tracking == 0
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
 
 		if (i < ROTOR_CHIRP_PERIOD - 1) {
-			chirp_cycle = 0;
+			ctx->tracking.chirp_cycle = 0;
 		}
-		if (chirp_cycle > ROTOR_CHIRP_PERIOD - 1) {
-			chirp_cycle = 0;
-			chirp_dwell_cycle = ROTOR_CHIRP_SWEEP_DELAY;
+		if (ctx->tracking.chirp_cycle > ROTOR_CHIRP_PERIOD - 1) {
+			ctx->tracking.chirp_cycle = 0;
+			ctx->tracking.chirp_dwell_cycle = ROTOR_CHIRP_SWEEP_DELAY;
 		}
-		if (chirp_dwell_cycle > 0) {
-			chirp_dwell_cycle--;
-			chirp_cycle = 0;
+		if (ctx->tracking.chirp_dwell_cycle > 0) {
+			ctx->tracking.chirp_dwell_cycle--;
+			ctx->tracking.chirp_cycle = 0;
 		}
-		if (chirp_dwell_cycle == 0 && i >= ROTOR_CHIRP_PERIOD - 1) {
-			chirp_cycle = chirp_cycle + 1;
-			chirp_time = (float) ((chirp_cycle - 1) / ROTOR_CHIRP_SAMPLE_RATE);
-			rotor_chirp_frequency = rotor_chirp_start_freq
-					+ (rotor_chirp_end_freq - rotor_chirp_start_freq)
-							* ((float) (chirp_cycle / rotor_chirp_period));
+		if (ctx->tracking.chirp_dwell_cycle == 0 && i >= ROTOR_CHIRP_PERIOD - 1) {
+			ctx->tracking.chirp_cycle = ctx->tracking.chirp_cycle + 1;
+			ctx->tracking.chirp_time = (float) ((ctx->tracking.chirp_cycle - 1) / ROTOR_CHIRP_SAMPLE_RATE);
+			ctx->tracking.rotor_chirp_frequency = ctx->tracking.rotor_chirp_start_freq
+					+ (ctx->tracking.rotor_chirp_end_freq - ctx->tracking.rotor_chirp_start_freq)
+							* ((float) (ctx->tracking.chirp_cycle / ctx->tracking.rotor_chirp_period));
 			rotor_position_command_steps =
 					((float) (ROTOR_CHIRP_STEP_AMPLITUDE
 							* STEPPER_READ_POSITION_STEPS_PER_DEGREE))
-							* sin(2.0 * 3.14159 * rotor_chirp_frequency * chirp_time);
+							* sin(2.0 * 3.14159 * ctx->tracking.rotor_chirp_frequency * ctx->tracking.chirp_time);
 		}
 	}
 
-	if (enable_rotor_tracking_comb_signal > 0 && i > 1000 && i > angle_cal_complete) {
-		chirp_time = ((float) (i - 1)) / 500.0;
-		rotor_track_comb_signal_frequency = 0.01;
-		rotor_track_comb_command = ((float) (rotor_track_comb_amplitude))
-				* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.017783;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.031623;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.056234;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.1;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.17783;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.31623;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 0.56234;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 1.0;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 1.7783;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 3.1623;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 5.6234;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
-		rotor_track_comb_signal_frequency = 10;
-		rotor_track_comb_command = rotor_track_comb_command
-				+ ((float) (rotor_track_comb_amplitude))
-						* sin(rotor_track_comb_signal_frequency * chirp_time);
+	if (ctx->tracking.enable_rotor_tracking_comb_signal > 0 && i > 1000 && i > angle_cal_complete) {
+		ctx->tracking.chirp_time = ((float) (i - 1)) / 500.0;
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.01;
+		ctx->tracking.rotor_track_comb_command = ((float) (ctx->tracking.rotor_track_comb_amplitude))
+				* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.017783;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.031623;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.056234;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.1;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.17783;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.31623;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 0.56234;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 1.0;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 1.7783;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 3.1623;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 5.6234;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
+		ctx->tracking.rotor_track_comb_signal_frequency = 10;
+		ctx->tracking.rotor_track_comb_command = ctx->tracking.rotor_track_comb_command
+				+ ((float) (ctx->tracking.rotor_track_comb_amplitude))
+						* sin(ctx->tracking.rotor_track_comb_signal_frequency * ctx->tracking.chirp_time);
 	}
-	if (enable_rotor_chirp == 0 && enable_mod_sin_rotor_tracking == 0
-			&& enable_rotor_tracking_comb_signal == 1) {
-		rotor_position_command_steps = rotor_track_comb_command;
+	if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_mod_sin_rotor_tracking == 0
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 1) {
+		rotor_position_command_steps = ctx->tracking.rotor_track_comb_command;
 	}
 
-	rotor_sine_drive = 0;
-	if (enable_mod_sin_rotor_tracking == 1 && ENABLE_ROTOR_CHIRP == 0
+	ctx->tracking.rotor_sine_drive = 0;
+	if (ctx->tracking.enable_mod_sin_rotor_tracking == 1 && ENABLE_ROTOR_CHIRP == 0
 			&& i > angle_cal_complete) {
 		if (ENABLE_ROTOR_CHIRP == 0) {
-			mod_sin_carrier_frequency = MOD_SIN_CARRIER_FREQ;
+			ctx->tracking.mod_sin_carrier_frequency = MOD_SIN_CARRIER_FREQ;
 		}
-		if (i > MOD_SIN_START_CYCLES && enable_mod_sin_rotor_tracking == 1) {
-			rotor_sine_drive = (float) (mod_sin_amplitude * (1 + sin(
+		if (i > MOD_SIN_START_CYCLES && ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
+			ctx->tracking.rotor_sine_drive = (float) (ctx->tracking.mod_sin_amplitude * (1 + sin(
 					-1.5707
 							+ ((i - MOD_SIN_START_CYCLES) / MOD_SIN_SAMPLE_RATE)
 									* (MOD_SIN_MODULATION_FREQ * 6.2832))));
-			rotor_sine_drive_mod = sin(
+			ctx->tracking.rotor_sine_drive_mod = sin(
 					0
 							+ ((i - MOD_SIN_START_CYCLES) / MOD_SIN_SAMPLE_RATE)
-									* (mod_sin_carrier_frequency * 6.2832));
-			rotor_sine_drive = rotor_sine_drive + MOD_SIN_MODULATION_MIN;
-			rotor_sine_drive = rotor_sine_drive * rotor_sine_drive_mod
-					* rotor_mod_control;
+									* (ctx->tracking.mod_sin_carrier_frequency * 6.2832));
+			ctx->tracking.rotor_sine_drive = ctx->tracking.rotor_sine_drive + MOD_SIN_MODULATION_MIN;
+			ctx->tracking.rotor_sine_drive = ctx->tracking.rotor_sine_drive * ctx->tracking.rotor_sine_drive_mod
+					* ctx->tracking.rotor_mod_control;
 		}
 		if (i > MOD_SIN_START_CYCLES && ENABLE_SIN_MOD == 0) {
-			rotor_sine_drive_mod = sin(
+			ctx->tracking.rotor_sine_drive_mod = sin(
 					0
 							+ ((i - MOD_SIN_START_CYCLES) / MOD_SIN_SAMPLE_RATE)
-									* (mod_sin_carrier_frequency * 6.2832));
-			rotor_sine_drive = rotor_control_sin_amplitude * rotor_sine_drive_mod
-					* rotor_mod_control;
+									* (ctx->tracking.mod_sin_carrier_frequency * 6.2832));
+			ctx->tracking.rotor_sine_drive = ctx->tracking.rotor_control_sin_amplitude * ctx->tracking.rotor_sine_drive_mod
+					* ctx->tracking.rotor_mod_control;
 		}
-		if (fabs(rotor_sine_drive_mod * MOD_SIN_AMPLITUDE) < 2
-				&& disable_mod_sin_rotor_tracking == 1
-				&& sine_drive_transition == 1) {
-			rotor_mod_control = 0.0;
-			sine_drive_transition = 0;
+		if (fabs(ctx->tracking.rotor_sine_drive_mod * MOD_SIN_AMPLITUDE) < 2
+				&& ctx->tracking.disable_mod_sin_rotor_tracking == 1
+				&& ctx->tracking.sine_drive_transition == 1) {
+			ctx->tracking.rotor_mod_control = 0.0;
+			ctx->tracking.sine_drive_transition = 0;
 		}
-		if (fabs(rotor_sine_drive_mod * MOD_SIN_AMPLITUDE) < 2
-				&& disable_mod_sin_rotor_tracking == 0
-				&& sine_drive_transition == 1) {
-			rotor_mod_control = 1.0;
-			sine_drive_transition = 0;
+		if (fabs(ctx->tracking.rotor_sine_drive_mod * MOD_SIN_AMPLITUDE) < 2
+				&& ctx->tracking.disable_mod_sin_rotor_tracking == 0
+				&& ctx->tracking.sine_drive_transition == 1) {
+			ctx->tracking.rotor_mod_control = 1.0;
+			ctx->tracking.sine_drive_transition = 0;
 		}
-		if (enable_rotor_position_step_response_cycle == 0) {
-			rotor_position_command_steps = rotor_sine_drive;
+		if (ctx->tracking.enable_rotor_position_step_response_cycle == 0) {
+			rotor_position_command_steps = ctx->tracking.rotor_sine_drive;
 		}
 	}
 
@@ -205,59 +205,59 @@ static void reference_update(AppControlContext *ctx, int i)
 		impulse_start_index++;
 	}
 
-	if (enable_pendulum_position_impulse_response_cycle == 1 && i != 0
+	if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1 && i != 0
 			&& i > angle_cal_complete) {
 		if ((i % PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_INTERVAL) == 0) {
 			if (ctx->select_suspended_mode == 1) {
-				pendulum_position_command_steps =
+				ctx->tracking.pendulum_position_command_steps =
 						(float) PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE;
 			}
 			if (ctx->select_suspended_mode == 0) {
-				pendulum_position_command_steps =
+				ctx->tracking.pendulum_position_command_steps =
 						(float) (PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE
 								/ PENDULUM_POSITION_IMPULSE_AMPLITUDE_SCALE);
 			}
-			chirp_cycle = 0;
+			ctx->tracking.chirp_cycle = 0;
 			impulse_start_index = 0;
 		}
 		if (impulse_start_index > PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_PERIOD) {
-			pendulum_position_command_steps = 0;
+			ctx->tracking.pendulum_position_command_steps = 0;
 		}
 		impulse_start_index++;
-		chirp_cycle++;
+		ctx->tracking.chirp_cycle++;
 	}
 
 	if ((i % ROTOR_POSITION_STEP_RESPONSE_CYCLE_INTERVAL) == 0
-			&& enable_rotor_position_step_response_cycle == 1
+			&& ctx->tracking.enable_rotor_position_step_response_cycle == 1
 			&& i > angle_cal_complete) {
 		rotor_position_step_polarity = -rotor_position_step_polarity;
 		if (rotor_position_step_polarity == 1) {
-			chirp_cycle = 0;
+			ctx->tracking.chirp_cycle = 0;
 		}
 	}
-	if (enable_rotor_position_step_response_cycle == 1
-			&& enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
+	if (ctx->tracking.enable_rotor_position_step_response_cycle == 1
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
 		if (STEP_RESPONSE_AMP_LIMIT_ENABLE == 1
-				&& fabsf(rotor_sine_drive) > STEP_RESPONSE_AMP_LIMIT) {
-			chirp_cycle = chirp_cycle + 1;
+				&& fabsf(ctx->tracking.rotor_sine_drive) > STEP_RESPONSE_AMP_LIMIT) {
+			ctx->tracking.chirp_cycle = ctx->tracking.chirp_cycle + 1;
 		} else {
-			if (enable_mod_sin_rotor_tracking == 1) {
-				rotor_position_command_steps = rotor_sine_drive + (float) ((rotor_position_step_polarity)
+			if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
+				rotor_position_command_steps = ctx->tracking.rotor_sine_drive + (float) ((rotor_position_step_polarity)
 						* ROTOR_POSITION_STEP_RESPONSE_CYCLE_AMPLITUDE
 						* STEPPER_READ_POSITION_STEPS_PER_DEGREE);
 			}
-			if (enable_mod_sin_rotor_tracking == 0) {
+			if (ctx->tracking.enable_mod_sin_rotor_tracking == 0) {
 				rotor_position_command_steps_pf = (float) ((rotor_position_step_polarity)
 						* ROTOR_POSITION_STEP_RESPONSE_CYCLE_AMPLITUDE
 						* STEPPER_READ_POSITION_STEPS_PER_DEGREE);
 			}
-			chirp_cycle = chirp_cycle + 1;
+			ctx->tracking.chirp_cycle = ctx->tracking.chirp_cycle + 1;
 		}
 	}
 
-	if (enable_rotor_position_step_response_cycle == 1
-			&& enable_mod_sin_rotor_tracking == 0
-			&& enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
+	if (ctx->tracking.enable_rotor_position_step_response_cycle == 1
+			&& ctx->tracking.enable_mod_sin_rotor_tracking == 0
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && i > angle_cal_complete) {
 		rotor_position_command_steps = rotor_position_command_steps_pf * ctx->lpf.iir_0_s
 				+ rotor_position_command_steps_pf_prev * ctx->lpf.iir_1_s
 				- ctx->core_cmd_shaper_state.rotor_position_command_steps_prev * ctx->lpf.iir_2_s;
@@ -400,8 +400,8 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 static void report_data(AppControlContext *ctx, int i)
 {
 	float noise_rej_signal;
-	if (enable_pendulum_position_impulse_response_cycle == 1) {
-		reference_tracking_command = pendulum_position_command_steps;
+	if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1) {
+		reference_tracking_command = ctx->tracking.pendulum_position_command_steps;
 	} else {
 		reference_tracking_command = rotor_position_command_steps;
 	}
@@ -418,34 +418,34 @@ static void report_data(AppControlContext *ctx, int i)
 	ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_current;
 	ctx->timing.tick_cycle_current = ctx->timing.tick;
 
-	if (ctx->enable_high_speed_sampling == 1 && enable_rotor_chirp == 1
-			&& enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
+	if (ctx->enable_high_speed_sampling == 1 && ctx->tracking.enable_rotor_chirp == 1
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
 		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(encoder_position)), display_parameter,
 				(int) (roundf(rotor_control_target_steps)),
 				(int) (reference_tracking_command));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
-	if (ctx->enable_high_speed_sampling == 1 && enable_rotor_chirp == 0
-			&& enable_rotor_tracking_comb_signal == 1 && ACCEL_CONTROL_DATA == 0) {
+	if (ctx->enable_high_speed_sampling == 1 && ctx->tracking.enable_rotor_chirp == 0
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 1 && ACCEL_CONTROL_DATA == 0) {
 		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.current_cpu_cycle_delay_relative_report,
 				(int) (roundf(encoder_position)), display_parameter,
 				(int) (roundf(rotor_control_target_steps)),
 				(int) (roundf(100 * rotor_position_command_steps)));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
-	if (ctx->enable_high_speed_sampling == 1 && enable_rotor_chirp == 0
-			&& enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
+	if (ctx->enable_high_speed_sampling == 1 && ctx->tracking.enable_rotor_chirp == 0
+			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
 		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(encoder_position)), display_parameter,
 				(int) (roundf(rotor_control_target_steps)),
 				(int) (reference_tracking_command));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
-	if (ctx->enable_high_speed_sampling == 1 && enable_rotor_chirp == 0
+	if (ctx->enable_high_speed_sampling == 1 && ctx->tracking.enable_rotor_chirp == 0
 			&& ACCEL_CONTROL_DATA == 1) {
-		if (enable_pendulum_position_impulse_response_cycle == 1) {
-			reference_tracking_command = pendulum_position_command_steps;
+		if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1) {
+			reference_tracking_command = ctx->tracking.pendulum_position_command_steps;
 		} else {
 			reference_tracking_command = rotor_position_command_steps;
 		}
@@ -510,7 +510,7 @@ static void report_data(AppControlContext *ctx, int i)
 			sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\r\n", (int) 1,
 					(int) ctx->torq_current_val, ctx->max_accel, ctx->max_decel,
 					ctx->gains.enable_disturbance_rejection_step, ctx->gains.enable_noise_rejection_step,
-					enable_rotor_position_step_response_cycle, (int) (ctx->adjust_increment * 10),
+					ctx->tracking.enable_rotor_position_step_response_cycle, (int) (ctx->adjust_increment * 10),
 					ctx->gains.enable_sensitivity_fnc_step);
 			ctx->report_mode = 0;
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);

@@ -19,22 +19,22 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
 
-	enable_rotor_chirp = 0;
-	rotor_chirp_start_freq = ROTOR_CHIRP_START_FREQ;
-	rotor_chirp_end_freq = ROTOR_CHIRP_END_FREQ;
-	rotor_chirp_period = ROTOR_CHIRP_PERIOD;
-	enable_mod_sin_rotor_tracking = ENABLE_MOD_SIN_ROTOR_TRACKING;
-	enable_rotor_position_step_response_cycle =
+	ctx->tracking.enable_rotor_chirp = 0;
+	ctx->tracking.rotor_chirp_start_freq = ROTOR_CHIRP_START_FREQ;
+	ctx->tracking.rotor_chirp_end_freq = ROTOR_CHIRP_END_FREQ;
+	ctx->tracking.rotor_chirp_period = ROTOR_CHIRP_PERIOD;
+	ctx->tracking.enable_mod_sin_rotor_tracking = ENABLE_MOD_SIN_ROTOR_TRACKING;
+	ctx->tracking.enable_rotor_position_step_response_cycle =
 			ENABLE_ROTOR_POSITION_STEP_RESPONSE_CYCLE;
-	disable_mod_sin_rotor_tracking = 0;
-	sine_drive_transition = 0;
-	mod_sin_amplitude = MOD_SIN_AMPLITUDE;
-	rotor_control_sin_amplitude = MOD_SIN_AMPLITUDE;
+	ctx->tracking.disable_mod_sin_rotor_tracking = 0;
+	ctx->tracking.sine_drive_transition = 0;
+	ctx->tracking.mod_sin_amplitude = MOD_SIN_AMPLITUDE;
+	ctx->tracking.rotor_control_sin_amplitude = MOD_SIN_AMPLITUDE;
 
 	ctx->gains.enable_disturbance_rejection_step = 0;
 	ctx->gains.enable_noise_rejection_step = 0;
 	ctx->gains.enable_sensitivity_fnc_step = 0;
-	enable_pendulum_position_impulse_response_cycle = 0;
+	ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
 
 	ctx->adjust_increment = 0.5;
 	ctx->mode_transition_state = 0;
