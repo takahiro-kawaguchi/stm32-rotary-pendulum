@@ -32,7 +32,7 @@ void app_run_mode_loop(AppControlContext *ctx)
 		for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
 			Msg.Data[k] = 0;
 		}
-		tick_read_cycle_start = HAL_GetTick();
+		ctx->timing.tick_read_cycle_start = HAL_GetTick();
 		user_configuration(ctx);
 
 		app_prepare_control_session(ctx);
@@ -45,14 +45,14 @@ void app_prepare_control_session(AppControlContext *ctx)
 	BSP_MotorControl_SoftStop(0);
 	BSP_MotorControl_WaitWhileActive(0);
 	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
-	BSP_MotorControl_SetMaxSpeed(0, max_speed);
-	BSP_MotorControl_SetMinSpeed(0, min_speed);
+	BSP_MotorControl_SetMaxSpeed(0, ctx->max_speed);
+	BSP_MotorControl_SetMinSpeed(0, ctx->min_speed);
 	BSP_MotorControl_SetAcceleration(0, MAX_ACCEL);
 	BSP_MotorControl_SetDeceleration(0, MAX_DECEL);
 
 	if (ACCEL_CONTROL == 0) {
 		sprintf(msg, "\n\rMotor Profile Speeds Set at Min %u Max %u Steps per Second",
-				min_speed, max_speed);
+				ctx->min_speed, ctx->max_speed);
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
 	if (ctx->select_suspended_mode == 0) {
@@ -83,23 +83,23 @@ void app_prepare_control_session(AppControlContext *ctx)
 	if (ctx->plant.rotor_damping_coefficient != 0 || ctx->plant.rotor_natural_frequency != 0) {
 		ctx->plant.Wn2 = ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency;
 		ctx->plant.rotor_plant_gain = ctx->plant.rotor_plant_gain * ctx->plant.Wn2;
-		ctx->plant.ao = ((2.0F / Tsample) * (2.0F / Tsample)
-				+ (2.0F / Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+		ctx->plant.ao = ((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)
+				+ (2.0F / ctx->timing.Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
 						* ctx->plant.rotor_natural_frequency
 				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency);
-		ctx->plant.c0 = ((2.0F / Tsample) * (2.0F / Tsample) / ctx->plant.ao);
+		ctx->plant.c0 = ((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample) / ctx->plant.ao);
 		ctx->plant.c1 = -2.0F * ctx->plant.c0;
 		ctx->plant.c2 = ctx->plant.c0;
 		ctx->plant.c3 = -(2.0F * ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency
-				- 2.0F * (2.0F / Tsample) * (2.0F / Tsample)) / ctx->plant.ao;
-		ctx->plant.c4 = -((2.0F / Tsample) * (2.0F / Tsample)
-				- (2.0F / Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+				- 2.0F * (2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)) / ctx->plant.ao;
+		ctx->plant.c4 = -((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)
+				- (2.0F / ctx->timing.Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
 						* ctx->plant.rotor_natural_frequency
 				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency) / ctx->plant.ao;
 	}
 
 	if (ctx->plant.enable_rotor_plant_design == 2) {
-		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * Tsample);
+		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * ctx->timing.Tsample);
 		ctx->plant.iir_0_r = 1 - (1 / (1 + ctx->plant.IWon_r));
 		ctx->plant.iir_1_r = -ctx->plant.iir_0_r;
 		ctx->plant.iir_2_r = (1 / (1 + ctx->plant.IWon_r)) * (1 - ctx->plant.IWon_r);
@@ -279,9 +279,9 @@ void app_run_control_session(AppControlContext *ctx)
 	sine_drive_transition = 0;
 	rotor_mod_control = 1.0;
 	ctx->enable_adaptive_mode = 0;
-	tick_cycle_start = HAL_GetTick();
-	tick_cycle_previous = tick_cycle_start;
-	tick_cycle_current = tick_cycle_start;
+	ctx->timing.tick_cycle_start = HAL_GetTick();
+	ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_start;
+	ctx->timing.tick_cycle_current = ctx->timing.tick_cycle_start;
 	ctx->timing.enable_cycle_delay_warning = ENABLE_CYCLE_DELAY_WARNING;
 	chirp_cycle = 0;
 	chirp_dwell_cycle = 0;
@@ -443,7 +443,7 @@ void app_run_control_session(AppControlContext *ctx)
 		encoder_position = encoder_position - encoder_position_offset;
 	}
 
-	app_init_control_pipeline(ctx, encoder_position_init, Tsample);
+	app_init_control_pipeline(ctx, encoder_position_init, ctx->timing.Tsample);
 
 	while (ctx->enable_control_action == 1) {
 		ret = control_handle_runtime_configuration(ctx, i);

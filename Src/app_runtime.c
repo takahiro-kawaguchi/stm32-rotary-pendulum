@@ -408,15 +408,15 @@ static void report_data(AppControlContext *ctx, int i)
 
 	if (i == 1) {
 		ctx->timing.cycle_period_start = HAL_GetTick();
-		ctx->timing.cycle_period_sum = 100 * Tsample * 1000 - 1;
+		ctx->timing.cycle_period_sum = 100 * ctx->timing.Tsample * 1000 - 1;
 	}
 	if (i % 100 == 0) {
 		ctx->timing.cycle_period_sum = HAL_GetTick() - ctx->timing.cycle_period_start;
 		ctx->timing.cycle_period_start = HAL_GetTick();
 	}
-	tick = HAL_GetTick();
-	tick_cycle_previous = tick_cycle_current;
-	tick_cycle_current = tick;
+	ctx->timing.tick = HAL_GetTick();
+	ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_current;
+	ctx->timing.tick_cycle_current = ctx->timing.tick;
 
 	if (ctx->enable_high_speed_sampling == 1 && enable_rotor_chirp == 1
 			&& enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
@@ -449,7 +449,7 @@ static void report_data(AppControlContext *ctx, int i)
 		} else {
 			reference_tracking_command = rotor_position_command_steps;
 		}
-		if (Tsample <= 0.00125) {
+		if (ctx->timing.Tsample <= 0.00125) {
 			sprintf(msg, "%i\t%lu\r\n", (int) reference_tracking_command,
 					current_pwm_period);
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -503,12 +503,12 @@ static void report_data(AppControlContext *ctx, int i)
 					(int) 0, ctx->core_ctl_state.PID_Pend.Kp,
 					ctx->core_ctl_state.PID_Pend.Ki, ctx->core_ctl_state.PID_Pend.Kd,
 					ctx->core_ctl_state.PID_Rotor.Kp, ctx->core_ctl_state.PID_Rotor.Ki,
-					ctx->core_ctl_state.PID_Rotor.Kd, max_speed / 10, min_speed / 10);
+					ctx->core_ctl_state.PID_Rotor.Kd, ctx->max_speed / 10, ctx->min_speed / 10);
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		}
 		if (ctx->report_mode == 2000) {
 			sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\r\n", (int) 1,
-					(int) ctx->torq_current_val, max_accel, max_decel,
+					(int) ctx->torq_current_val, ctx->max_accel, ctx->max_decel,
 					ctx->gains.enable_disturbance_rejection_step, ctx->gains.enable_noise_rejection_step,
 					enable_rotor_position_step_response_cycle, (int) (ctx->adjust_increment * 10),
 					ctx->gains.enable_sensitivity_fnc_step);

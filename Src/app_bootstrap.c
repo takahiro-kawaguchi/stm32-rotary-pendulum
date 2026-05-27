@@ -65,18 +65,18 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	BSP_MotorControl_SetDeceleration(0, MAX_DECEL_UPPER_INIT);
 	HAL_Delay(1);
 
-	max_accel = MAX_ACCEL;
-	max_decel = MAX_DECEL;
-	max_speed = MAX_SPEED_MODE_1;
-	min_speed = MIN_SPEED_MODE_1;
+	ctx->max_accel = MAX_ACCEL;
+	ctx->max_decel = MAX_DECEL;
+	ctx->max_speed = MAX_SPEED_MODE_1;
+	ctx->min_speed = MIN_SPEED_MODE_1;
 	HAL_Delay(1);
-	BSP_MotorControl_SetMaxSpeed(0, max_speed);
+	BSP_MotorControl_SetMaxSpeed(0, ctx->max_speed);
 	HAL_Delay(1);
-	BSP_MotorControl_SetMinSpeed(0, min_speed);
+	BSP_MotorControl_SetMinSpeed(0, ctx->min_speed);
 	HAL_Delay(1);
-	BSP_MotorControl_SetAcceleration(0, max_accel);
+	BSP_MotorControl_SetAcceleration(0, ctx->max_accel);
 	HAL_Delay(1);
-	BSP_MotorControl_SetDeceleration(0, max_decel);
+	BSP_MotorControl_SetDeceleration(0, ctx->max_decel);
 	HAL_Delay(1);
 
 	ctx->torq_current_val = MAX_TORQUE_CONFIG;
@@ -115,8 +115,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	}
 
 	ctx->timing.t_sample_cpu_cycles = (uint32_t) round(T_SAMPLE_DEFAULT * RCC_HCLK_FREQ);
-	Tsample = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
-	Tsample_rotor = Tsample;
+	ctx->timing.Tsample = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
+	ctx->timing.Tsample_rotor = ctx->timing.Tsample;
 	assert(RCC_SYS_CLOCK_FREQ == HAL_RCC_GetSysClockFreq());
 	assert(RCC_HCLK_FREQ == HAL_RCC_GetHCLKFreq());
 
@@ -125,25 +125,25 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 		float fo, Wo, IWon;
 		fo = LP_CORNER_FREQ_ROTOR;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * Tsample);
+		IWon = 2 / (Wo * ctx->timing.Tsample);
 		ctx->lpf.iir_0 = 1 / (1 + IWon);
 		ctx->lpf.iir_1 = ctx->lpf.iir_0;
 		ctx->lpf.iir_2 = ctx->lpf.iir_0 * (1 - IWon);
 		fo = LP_CORNER_FREQ_STEP;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * Tsample);
+		IWon = 2 / (Wo * ctx->timing.Tsample);
 		ctx->lpf.iir_0_s = 1 / (1 + IWon);
 		ctx->lpf.iir_1_s = ctx->lpf.iir_0_s;
 		ctx->lpf.iir_2_s = ctx->lpf.iir_0_s * (1 - IWon);
 		fo = LP_CORNER_FREQ_LONG_TERM;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * Tsample);
+		IWon = 2 / (Wo * ctx->timing.Tsample);
 		ctx->lpf.iir_LT_0 = 1 / (1 + IWon);
 		ctx->lpf.iir_LT_1 = ctx->lpf.iir_LT_0;
 		ctx->lpf.iir_LT_2 = ctx->lpf.iir_LT_0 * (1 - IWon);
 	}
 
-	tick_read_cycle_start = HAL_GetTick();
+	ctx->timing.tick_read_cycle_start = HAL_GetTick();
 	sprintf(msg, "\n\rSystem Starting Prepare to Enter Mode Selection... ");
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 

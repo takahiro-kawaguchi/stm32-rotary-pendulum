@@ -520,14 +520,14 @@ extern char test_msg[128];
 
 /* System timing variables */
 
-extern uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
-       tick_read_cycle, tick_read_cycle_start;
-extern float Tsample, Tsample_rotor;
+/* tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
+   tick_read_cycle, tick_read_cycle_start → ctx->timing fields */
+/* Tsample, Tsample_rotor → ctx->timing fields */
 /* test_time → write-only, removed */
 /* angle_scale, enable_high_speed_sampling, reset_state → ctx fields */
 
 /* Motor configuration */
-extern uint16_t min_speed, max_speed, max_accel, max_decel;
+/* min_speed, max_speed, max_accel, max_decel → ctx fields */
 
 /* Control system output signal */
 extern float rotor_control_target_steps;

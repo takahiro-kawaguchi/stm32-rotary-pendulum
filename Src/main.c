@@ -369,16 +369,11 @@ float rotor_track_comb_amplitude;
 /* mode_string_mode_high_speed_test, mode_string_mode_pendulum_sysid_test → removed (unused) */
 
 /* System timing variables */
-
-uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
-tick_read_cycle, tick_read_cycle_start;
-
-float Tsample, Tsample_rotor;
-/* test_time → write-only (never read), removed */
-/* angle_scale, enable_high_speed_sampling, reset_state → ctx fields */
+/* tick, tick_cycle_current/previous/start, tick_read_cycle/_start → ctx->timing fields */
+/* Tsample, Tsample_rotor → ctx->timing fields */
 
 /* Motor configuration */
-uint16_t min_speed, max_speed, max_accel, max_decel;
+/* min_speed, max_speed, max_accel, max_decel → ctx fields */
 
 int main(void) {
 	/* Initialize reset state indicating that reset has occurred */

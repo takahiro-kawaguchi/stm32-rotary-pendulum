@@ -52,6 +52,14 @@ typedef struct {
 	int cycle_period_start;
 	int cycle_period_sum;
 	int enable_cycle_delay_warning;
+	uint32_t tick;
+	uint32_t tick_cycle_current;
+	uint32_t tick_cycle_previous;
+	uint32_t tick_cycle_start;
+	uint32_t tick_read_cycle;
+	uint32_t tick_read_cycle_start;
+	float Tsample;
+	float Tsample_rotor;
 } LoopTimingState;
 
 typedef struct {
@@ -106,6 +114,10 @@ typedef struct AppControlContext {
 	int   enable_rotor_actuator_control;
 	int   enable_motor_actuator_characterization_mode;
 	float torq_current_val;
+	uint16_t min_speed;
+	uint16_t max_speed;
+	uint16_t max_accel;
+	uint16_t max_decel;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;

@@ -184,7 +184,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 	input.feedforward_gain = ctx->gains.feedforward_gain;
 	input.integral_compensator_gain = ctx->gains.integral_compensator_gain;
 	input.load_disturbance_sensitivity_scale = ctx->gains.load_disturbance_sensitivity_scale;
-	input.sample_period_rotor_s = Tsample_rotor;
+	input.sample_period_rotor_s = ctx->timing.Tsample_rotor;
 	input.enable_state_feedback = ctx->gains.enable_state_feedback;
 	input.enable_disturbance_rejection_step = ctx->gains.enable_disturbance_rejection_step;
 	input.enable_sensitivity_fnc_step = ctx->gains.enable_sensitivity_fnc_step;
@@ -207,7 +207,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 {
 	CommandShaperConfig shaper_cfg;
-	shaper_cfg.sample_period_s = Tsample;
+	shaper_cfg.sample_period_s = ctx->timing.Tsample;
 	shaper_cfg.accel_control = ACCEL_CONTROL;
 	shaper_cfg.angle_cal_complete = angle_cal_complete;
 	shaper_cfg.full_sysid_start_index = full_sysid_start_index;

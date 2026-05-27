@@ -228,71 +228,71 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_dec_max_s) == 0) {
-		max_speed = L6474_GetMaxSpeed(0);
-		max_speed = max_speed - *adjust_increment;
-		if (max_speed < 100){ max_speed = 100; }
-		if (max_speed < min_speed){ max_speed = min_speed;}
+		ctx->max_speed = L6474_GetMaxSpeed(0);
+		ctx->max_speed = ctx->max_speed - *adjust_increment;
+		if (ctx->max_speed < 100){ ctx->max_speed = 100; }
+		if (ctx->max_speed < ctx->min_speed){ ctx->max_speed = ctx->min_speed;}
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetMaxSpeed(0, max_speed);
+		L6474_SetMaxSpeed(0, ctx->max_speed);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_max_s) == 0) {
-		max_speed = L6474_GetMaxSpeed(0);
-		max_speed = max_speed + *adjust_increment;
-		if (max_speed > 1000){ max_speed = 1000; }
+		ctx->max_speed = L6474_GetMaxSpeed(0);
+		ctx->max_speed = ctx->max_speed + *adjust_increment;
+		if (ctx->max_speed > 1000){ ctx->max_speed = 1000; }
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetMaxSpeed(0, max_speed);
+		L6474_SetMaxSpeed(0, ctx->max_speed);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_dec_min_s) == 0) {
-		min_speed = L6474_GetMinSpeed(0);
-		min_speed = min_speed - *adjust_increment;
-		if (min_speed < 100){ min_speed = 100; }
+		ctx->min_speed = L6474_GetMinSpeed(0);
+		ctx->min_speed = ctx->min_speed - *adjust_increment;
+		if (ctx->min_speed < 100){ ctx->min_speed = 100; }
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetMinSpeed(0, min_speed);
+		L6474_SetMinSpeed(0, ctx->min_speed);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_min_s) == 0) {
-		min_speed = L6474_GetMinSpeed(0);
-		min_speed = min_speed + *adjust_increment;
-		if (min_speed > 1000){ min_speed = 1000; }
-		if (min_speed > max_speed){ min_speed = max_speed;}
+		ctx->min_speed = L6474_GetMinSpeed(0);
+		ctx->min_speed = ctx->min_speed + *adjust_increment;
+		if (ctx->min_speed > 1000){ ctx->min_speed = 1000; }
+		if (ctx->min_speed > ctx->max_speed){ ctx->min_speed = ctx->max_speed;}
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetMinSpeed(0, min_speed);
+		L6474_SetMinSpeed(0, ctx->min_speed);
 		config_command = 1;
 		mode_index_command = -1;
 	} else if (strcmp(user_config_input, mode_string_dec_max_a) == 0) {
-		max_accel = L6474_GetAcceleration(0);
-		max_accel = max_accel - *adjust_increment;
-		if (max_accel <  0){ max_accel = 0;}
+		ctx->max_accel = L6474_GetAcceleration(0);
+		ctx->max_accel = ctx->max_accel - *adjust_increment;
+		if (ctx->max_accel <  0){ ctx->max_accel = 0;}
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetAcceleration(0, max_accel);
+		L6474_SetAcceleration(0, ctx->max_accel);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_max_a) == 0) {
-		max_accel = L6474_GetAcceleration(0);
-		max_accel = max_accel + *adjust_increment;
-		if (max_accel >  10000){ max_accel = 10000;}
+		ctx->max_accel = L6474_GetAcceleration(0);
+		ctx->max_accel = ctx->max_accel + *adjust_increment;
+		if (ctx->max_accel >  10000){ ctx->max_accel = 10000;}
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetAcceleration(0, max_accel);
+		L6474_SetAcceleration(0, ctx->max_accel);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_dec_max_d) == 0) {
-		max_decel = L6474_GetDeceleration(0);
-		max_decel = max_decel - *adjust_increment;
-		if (max_decel <  0){ max_decel = 0;}
+		ctx->max_decel = L6474_GetDeceleration(0);
+		ctx->max_decel = ctx->max_decel - *adjust_increment;
+		if (ctx->max_decel <  0){ ctx->max_decel = 0;}
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetDeceleration(0, max_decel);
+		L6474_SetDeceleration(0, ctx->max_decel);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_max_d) == 0) {
-		max_decel = L6474_GetDeceleration(0);
-		max_decel = max_decel + *adjust_increment;
-		if (max_decel > 10000) { max_decel = 10000; }
+		ctx->max_decel = L6474_GetDeceleration(0);
+		ctx->max_decel = ctx->max_decel + *adjust_increment;
+		if (ctx->max_decel > 10000) { ctx->max_decel = 10000; }
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetDeceleration(0, max_decel);
+		L6474_SetDeceleration(0, ctx->max_decel);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_select_mode_5) == 0) {
 		BSP_MotorControl_SoftStop(0);
@@ -741,8 +741,8 @@ void user_configuration(AppControlContext *ctx){
 		 * Exit read loop after timeout selecting default Mode 1
 		 */
 
-		tick_read_cycle = HAL_GetTick();
-		if (((tick_read_cycle - tick_read_cycle_start) > START_DEFAULT_MODE_TIME) && (mode_interactive == 0)) {
+		ctx->timing.tick_read_cycle = HAL_GetTick();
+		if (((ctx->timing.tick_read_cycle - ctx->timing.tick_read_cycle_start) > START_DEFAULT_MODE_TIME) && (mode_interactive == 0)) {
 			sprintf(msg, "\n\rNo Entry Detected - Now Selecting Default Inverted Pendulum Mode 1......: \n\r");
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 			ctx->gains.enable_state_feedback = 0;
@@ -753,8 +753,8 @@ void user_configuration(AppControlContext *ctx){
 			ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
 			ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
 			ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
-			max_speed = 		MAX_SPEED_MODE_1;
-			min_speed = 		MIN_SPEED_MODE_1;
+			ctx->max_speed = 		MAX_SPEED_MODE_1;
+			ctx->min_speed = 		MIN_SPEED_MODE_1;
 			ctx->plant.enable_rotor_plant_design = 0;
 			ctx->plant.enable_rotor_plant_gain_design = 0;
 			enable_rotor_position_step_response_cycle = 0;
@@ -814,8 +814,8 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
 				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
-				max_speed = 		MAX_SPEED_MODE_1;
-				min_speed = 		MIN_SPEED_MODE_1;
+				ctx->max_speed = 		MAX_SPEED_MODE_1;
+				ctx->min_speed = 		MIN_SPEED_MODE_1;
 				ctx->plant.enable_rotor_plant_design = 0;
 				ctx->plant.enable_rotor_plant_gain_design = 0;
 
@@ -958,8 +958,8 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_2;
 				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_2;
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_2;
-				max_speed = 		MAX_SPEED_MODE_2;
-				min_speed = 		MIN_SPEED_MODE_2;
+				ctx->max_speed = 		MAX_SPEED_MODE_2;
+				ctx->min_speed = 		MIN_SPEED_MODE_2;
 				ctx->plant.enable_rotor_plant_design = 0;
 				ctx->plant.enable_rotor_plant_gain_design = 0;
 
@@ -1082,8 +1082,8 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_3;
 				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_3;
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_3;
-				max_speed = 		MAX_SPEED_MODE_3;
-				min_speed = 		MIN_SPEED_MODE_3;
+				ctx->max_speed = 		MAX_SPEED_MODE_3;
+				ctx->min_speed = 		MIN_SPEED_MODE_3;
 				ctx->plant.enable_rotor_plant_design = 0;
 				ctx->plant.enable_rotor_plant_gain_design = 0;
 
@@ -1214,8 +1214,8 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_4;
 				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_4;
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_4;
-				max_speed = 		MAX_SPEED_MODE_1;
-				min_speed = 		MIN_SPEED_MODE_1;
+				ctx->max_speed = 		MAX_SPEED_MODE_1;
+				ctx->min_speed = 		MIN_SPEED_MODE_1;
 				ctx->plant.enable_rotor_plant_design = 0;
 				ctx->plant.enable_rotor_plant_gain_design = 0;
 
@@ -2023,8 +2023,8 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				}
 
-				max_speed = 		MAX_SPEED_MODE_1;
-				min_speed = 		MIN_SPEED_MODE_1;
+				ctx->max_speed = 		MAX_SPEED_MODE_1;
+				ctx->min_speed = 		MIN_SPEED_MODE_1;
 
 
 				break;
@@ -2216,8 +2216,8 @@ void user_configuration(AppControlContext *ctx){
 					ctx->gains.rotor_d_gain = 	-ctx->gains.rotor_d_gain;
 				}
 
-				max_speed = 		MAX_SPEED_MODE_1;
-				min_speed = 		MIN_SPEED_MODE_1;
+				ctx->max_speed = 		MAX_SPEED_MODE_1;
+				ctx->min_speed = 		MIN_SPEED_MODE_1;
 
 				sprintf(msg, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.proportional, ctx->gains.integral, ctx->gains.derivative);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
@@ -2397,8 +2397,8 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
 				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
-				max_speed = 		MAX_SPEED_MODE_1;
-				min_speed = 		MIN_SPEED_MODE_1;
+				ctx->max_speed = 		MAX_SPEED_MODE_1;
+				ctx->min_speed = 		MIN_SPEED_MODE_1;
 				enable_rotor_position_step_response_cycle = 0;
 				enable_mod_sin_rotor_tracking = 0;
 				enable_angle_cal = 1;
@@ -2626,7 +2626,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 	/* test_time was write-only, removed */
 
 	rotor_chirp_step_period = (int) (rotor_chirp_period * 240.0);
-	tick_cycle_start = HAL_GetTick();
+	ctx->timing.tick_cycle_start = HAL_GetTick();
 	mode_index_command = 1;
 	mode_index = 1;
 
@@ -2793,15 +2793,16 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 
 			if (i == 0) {
 				ctx->timing.cycle_period_start = HAL_GetTick();
-				ctx->timing.cycle_period_sum = 100 * Tsample * 1000 - 1;
+				ctx->timing.cycle_period_sum = 100 * ctx->timing.Tsample * 1000 - 1;
 			}
 			if (i % 100 == 0) {
 				ctx->timing.cycle_period_sum = HAL_GetTick() - ctx->timing.cycle_period_start;
 				ctx->timing.cycle_period_start = HAL_GetTick();
 			}
 
-			tick_cycle_previous = tick_cycle_current;
-			tick_cycle_current = tick;
+			ctx->timing.tick = HAL_GetTick();
+			ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_current;
+			ctx->timing.tick_cycle_current = ctx->timing.tick;
 			chirp_time = (float) (i) / 400;
 			rotor_chirp_frequency = rotor_chirp_start_freq
 					+ (rotor_chirp_end_freq - rotor_chirp_start_freq)
@@ -2849,7 +2850,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 			sprintf(msg,
 					"%i\t%i\t%i\t%i\t%i\t%f\t%i\t%i\t%i\t%i\t%i\r\n", i,
 					ctx->timing.cycle_period_sum,
-					(int) (tick_cycle_current - tick_cycle_previous),
+					(int) (ctx->timing.tick_cycle_current - ctx->timing.tick_cycle_previous),
 					current_speed, rotor_position_steps,
 					rotor_position_command_steps, motor_state,
 					rotor_test_speed_max, rotor_test_speed_min,
