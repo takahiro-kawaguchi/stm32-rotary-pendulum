@@ -10,6 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void app_session_home_rotor(AppControlContext *ctx);
+static void app_session_wait_pendulum_rest(AppControlContext *ctx);
+static void app_session_wait_pendulum_upright(AppControlContext *ctx);
+static void app_session_init_state(AppControlContext *ctx);
+static void app_run_swing_up(AppControlContext *ctx);
+static void app_run_balance_loop(AppControlContext *ctx);
+
 void app_run_mode_loop(AppControlContext *ctx)
 {
 	int k;
@@ -108,13 +115,21 @@ void app_prepare_control_session(AppControlContext *ctx)
 
 void app_run_control_session(AppControlContext *ctx)
 {
-	int i = 0, k, m, ret;
-	int encoder_position_curr, encoder_position_prev;
-	motorDir_t swing_up_direction;
-	int swing_up_state;
-	int stage_count, stage_amp;
-
 	ctx->enable_control_action = ENABLE_CONTROL_ACTION;
+
+	app_session_home_rotor(ctx);
+	app_session_wait_pendulum_rest(ctx);
+	app_session_wait_pendulum_upright(ctx);
+	app_session_init_state(ctx);
+	if (ctx->enable_swing_up == 1 && ctx->select_suspended_mode == 0) {
+		app_run_swing_up(ctx);
+	}
+	app_run_balance_loop(ctx);
+}
+
+static void app_session_home_rotor(AppControlContext *ctx)
+{
+	int ret;
 
 	if (ctx->reset_state == 1) {
 		hardware_rotor_home();
@@ -135,6 +150,13 @@ void app_run_control_session(AppControlContext *ctx)
 	HAL_Delay(150);
 	BSP_MotorControl_GoTo(0, 0);
 	BSP_MotorControl_WaitWhileActive(0);
+	(void)ret;
+}
+
+static void app_session_wait_pendulum_rest(AppControlContext *ctx)
+{
+	int ret;
+	int encoder_position_curr, encoder_position_prev;
 
 	sprintf(msg, "Test for Pendulum at Rest - Waiting for Pendulum to Stabilize\r\n");
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -198,6 +220,12 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_steps;
 	sprintf(msg, "Pendulum Initial Angle %i\r\n", ctx->enc_cal.encoder_position_steps);
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	(void)ret;
+}
+
+static void app_session_wait_pendulum_upright(AppControlContext *ctx)
+{
+	int ret = 0;
 
 	if (ctx->enable_swing_up == 0) {
 		BSP_MotorControl_GoTo(0, 30);
@@ -259,6 +287,12 @@ void app_run_control_session(AppControlContext *ctx)
 				(int) (CONTROL_START_DELAY / 1000));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
+	(void)ret;
+}
+
+static void app_session_init_state(AppControlContext *ctx)
+{
+	int k, m;
 
 	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
 	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
@@ -330,95 +364,108 @@ void app_run_control_session(AppControlContext *ctx)
 	if (ctx->select_suspended_mode == 0) {
 		ctx->gains.load_disturbance_sensitivity_scale = LOAD_DISTURBANCE_SENSITIVITY_SCALE;
 	}
+}
 
-	if (ctx->enable_swing_up == 1 && ctx->select_suspended_mode == 0) {
-		ctx->core_ctl_state.PID_Rotor.Kp = 20;
-		ctx->core_ctl_state.PID_Rotor.Ki = 10;
-		ctx->core_ctl_state.PID_Rotor.Kd = 10;
-		ctx->core_ctl_state.PID_Pend.Kp = 300;
-		ctx->core_ctl_state.PID_Pend.Ki = 0.0;
-		ctx->core_ctl_state.PID_Pend.Kd = 30.0;
-		ctx->gains.enable_state_feedback = 0;
-		ctx->gains.integral_compensator_gain = 0;
-		ctx->gains.feedforward_gain = 1;
-		ctx->rotor_pos.rotor_position_command_steps = 0;
-		ctx->gains.enable_state_feedback = 0;
-		ctx->gains.enable_disturbance_rejection_step = 0;
-		ctx->gains.enable_sensitivity_fnc_step = 0;
-		ctx->gains.enable_noise_rejection_step = 0;
-		ctx->plant.enable_rotor_plant_design = 0;
-		ctx->plant.enable_rotor_plant_gain_design = 0;
+static void app_run_swing_up(AppControlContext *ctx)
+{
+	int ret;
+	motorDir_t swing_up_direction;
+	int swing_up_state;
+	int stage_count, stage_amp;
 
-		ctx->torq_current_val = MAX_TORQUE_SWING_UP;
-		L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
+	ctx->core_ctl_state.PID_Rotor.Kp = 20;
+	ctx->core_ctl_state.PID_Rotor.Ki = 10;
+	ctx->core_ctl_state.PID_Rotor.Kd = 10;
+	ctx->core_ctl_state.PID_Pend.Kp = 300;
+	ctx->core_ctl_state.PID_Pend.Ki = 0.0;
+	ctx->core_ctl_state.PID_Pend.Kd = 30.0;
+	ctx->gains.enable_state_feedback = 0;
+	ctx->gains.integral_compensator_gain = 0;
+	ctx->gains.feedforward_gain = 1;
+	ctx->rotor_pos.rotor_position_command_steps = 0;
+	ctx->gains.enable_state_feedback = 0;
+	ctx->gains.enable_disturbance_rejection_step = 0;
+	ctx->gains.enable_sensitivity_fnc_step = 0;
+	ctx->gains.enable_noise_rejection_step = 0;
+	ctx->plant.enable_rotor_plant_design = 0;
+	ctx->plant.enable_rotor_plant_gain_design = 0;
 
-		sprintf(msg, "Pendulum Swing Up Starting\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	ctx->torq_current_val = MAX_TORQUE_SWING_UP;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 
-		hardware_swing_up_reset();
-		swing_up_state = 0;
-		stage_count = 0;
-		stage_amp = STAGE_0_AMP;
+	sprintf(msg, "Pendulum Swing Up Starting\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-		swing_up_direction = FORWARD;
-		BSP_MotorControl_Move(0, swing_up_direction, 150);
-		BSP_MotorControl_WaitWhileActive(0);
+	hardware_swing_up_reset();
+	swing_up_state = 0;
+	stage_count = 0;
+	stage_amp = STAGE_0_AMP;
 
-		while (1) {
-			SwingUpSensorState sus;
-			HAL_Delay(2);
-			ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
-					ctx->enc_cal.encoder_position_init, &htim3);
-			hardware_swing_up_get(&sus);
+	swing_up_direction = FORWARD;
+	BSP_MotorControl_Move(0, swing_up_direction, 150);
+	BSP_MotorControl_WaitWhileActive(0);
 
-			if (fabs(
-					ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
-							- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-				break;
-			}
-			if (fabs(
-					ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
-							+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-				ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_down
-						- 2 * (int) (180 * ctx->angle_scale);
-				break;
-			}
+	while (1) {
+		SwingUpSensorState sus;
+		HAL_Delay(2);
+		ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+				ctx->enc_cal.encoder_position_init, &htim3);
+		hardware_swing_up_get(&sus);
 
-			if (sus.zero_crossed) {
-				hardware_swing_up_clear_zero_crossed();
-				if (swing_up_state == 0) {
-					BSP_MotorControl_Move(0, swing_up_direction, stage_amp);
-					BSP_MotorControl_WaitWhileActive(0);
-					stage_count++;
+		if (fabs(
+				ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
+						- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
+			break;
+		}
+		if (fabs(
+				ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
+						+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
+			ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_down
+					- 2 * (int) (180 * ctx->angle_scale);
+			break;
+		}
 
-					if (sus.prev_global_max_encoder_position != sus.global_max_encoder_position
-							&& stage_count > 4) {
-						if (abs(sus.global_max_encoder_position) < 600) {
-							stage_amp = STAGE_0_AMP;
-						}
-						if (abs(sus.global_max_encoder_position) >= 600
-								&& abs(sus.global_max_encoder_position) < 1000) {
-							stage_amp = STAGE_1_AMP;
-						}
-						if (abs(sus.global_max_encoder_position) >= 1000) {
-							stage_amp = STAGE_2_AMP;
-						}
+		if (sus.zero_crossed) {
+			hardware_swing_up_clear_zero_crossed();
+			if (swing_up_state == 0) {
+				BSP_MotorControl_Move(0, swing_up_direction, stage_amp);
+				BSP_MotorControl_WaitWhileActive(0);
+				stage_count++;
+
+				if (sus.prev_global_max_encoder_position != sus.global_max_encoder_position
+						&& stage_count > 4) {
+					if (abs(sus.global_max_encoder_position) < 600) {
+						stage_amp = STAGE_0_AMP;
 					}
-					hardware_swing_up_set_prev_global_max(sus.global_max_encoder_position);
-					hardware_swing_up_reset_global_max();
-					ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
-							ctx->enc_cal.encoder_position_init, &htim3);
-					hardware_swing_up_get(&sus);
+					if (abs(sus.global_max_encoder_position) >= 600
+							&& abs(sus.global_max_encoder_position) < 1000) {
+						stage_amp = STAGE_1_AMP;
+					}
+					if (abs(sus.global_max_encoder_position) >= 1000) {
+						stage_amp = STAGE_2_AMP;
+					}
 				}
-			}
-
-			if (sus.peaked && !sus.handled_peak) {
-				hardware_swing_up_handle_peak();
-				swing_up_direction =
-						swing_up_direction == FORWARD ? BACKWARD : FORWARD;
+				hardware_swing_up_set_prev_global_max(sus.global_max_encoder_position);
+				hardware_swing_up_reset_global_max();
+				ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+						ctx->enc_cal.encoder_position_init, &htim3);
+				hardware_swing_up_get(&sus);
 			}
 		}
+
+		if (sus.peaked && !sus.handled_peak) {
+			hardware_swing_up_handle_peak();
+			swing_up_direction =
+					swing_up_direction == FORWARD ? BACKWARD : FORWARD;
+		}
 	}
+	(void)ret;
+	(void)swing_up_state;
+}
+
+static void app_run_balance_loop(AppControlContext *ctx)
+{
+	int i = 0, ret;
 
 	ctx->enable_control_action = 1;
 
@@ -468,4 +515,5 @@ void app_run_control_session(AppControlContext *ctx)
 	}
 
 	control_shutdown_sequence(ctx);
+	(void)ret;
 }
