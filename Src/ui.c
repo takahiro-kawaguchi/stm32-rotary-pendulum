@@ -212,20 +212,20 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		PID_Rotor->Ki = PID_Rotor->Ki - *adjust_increment;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_dec_torq_c) == 0) {
-		torq_current_val = L6474_GetAnalogValue(0, L6474_TVAL);
-		torq_current_val = torq_current_val - *adjust_increment;
-		if (torq_current_val < 200){ torq_current_val = 200; }
+		ctx->torq_current_val = L6474_GetAnalogValue(0, L6474_TVAL);
+		ctx->torq_current_val = ctx->torq_current_val - *adjust_increment;
+		if (ctx->torq_current_val < 200){ ctx->torq_current_val = 200; }
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+		L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_torq_c) == 0) {
-		torq_current_val = L6474_GetAnalogValue(0, L6474_TVAL);
-		torq_current_val = torq_current_val + *adjust_increment;
-		if (torq_current_val > MAX_TORQUE_CONFIG){ torq_current_val = MAX_TORQUE_CONFIG; }
+		ctx->torq_current_val = L6474_GetAnalogValue(0, L6474_TVAL);
+		ctx->torq_current_val = ctx->torq_current_val + *adjust_increment;
+		if (ctx->torq_current_val > MAX_TORQUE_CONFIG){ ctx->torq_current_val = MAX_TORQUE_CONFIG; }
 		BSP_MotorControl_SoftStop(0);
 		BSP_MotorControl_WaitWhileActive(0);
-		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+		L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_dec_max_s) == 0) {
 		max_speed = L6474_GetMaxSpeed(0);
@@ -307,13 +307,13 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		PID_Rotor->Kp = SECONDARY_PROPORTIONAL_MODE_5;
 		PID_Rotor->Ki = SECONDARY_INTEGRAL_MODE_5;
 		PID_Rotor->Kd = SECONDARY_DERIVATIVE_MODE_5;
-		enable_adaptive_mode = 0;
+		ctx->enable_adaptive_mode = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_step ) == 0 ){
 		enable_rotor_position_step_response_cycle = 1;
-		enable_sensitivity_fnc_step = 0;
-		enable_noise_rejection_step = 0;
-		enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_step ) == 0 ){
 		enable_rotor_position_step_response_cycle = 0;
@@ -321,40 +321,40 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 	} else if (strcmp(user_config_input, mode_string_enable_pendulum_impulse) == 0 ){
 		enable_pendulum_position_impulse_response_cycle = 1;
 		enable_rotor_position_step_response_cycle = 0;
-		enable_sensitivity_fnc_step = 0;
-		enable_noise_rejection_step = 0;
-		enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_pendulum_impulse ) == 0 ){
 		enable_pendulum_position_impulse_response_cycle = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_noise_rej_step ) == 0 ){
-		enable_noise_rejection_step = 1;
+		ctx->gains.enable_noise_rejection_step = 1;
 		enable_rotor_position_step_response_cycle = 1;
-		enable_disturbance_rejection_step = 0;
-		enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_noise_rej_step ) == 0 ){
-		enable_noise_rejection_step = 0;
-		enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_sensitivity_fnc_step ) == 0 ){
-		enable_sensitivity_fnc_step = 1;
+		ctx->gains.enable_sensitivity_fnc_step = 1;
 		enable_rotor_position_step_response_cycle = 1;
-		enable_disturbance_rejection_step = 0;
-		enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_noise_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_sensitivity_fnc_step ) == 0 ){
-		enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_load_dist ) == 0 ){
-		enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
 		enable_rotor_position_step_response_cycle = 1;
-		enable_disturbance_rejection_step = 1;
-		enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 1;
+		ctx->gains.enable_noise_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_load_dist ) == 0 ){
-		enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_inc_step_size ) == 0 ){
 		step_size = step_size + 1;
@@ -411,7 +411,7 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 
 void assign_mode_1(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
-	select_suspended_mode = 0;
+	ctx->select_suspended_mode = 0;
 	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_1;
 	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_1;
 	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_1;
@@ -424,13 +424,13 @@ void assign_mode_1(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
 	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
 	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
-	torq_current_val = MAX_TORQUE_CONFIG;
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	ctx->torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 }
 
 void assign_mode_2(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
-	select_suspended_mode = 0;
+	ctx->select_suspended_mode = 0;
 	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_2;
 	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_2;
 	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_2;
@@ -443,13 +443,13 @@ void assign_mode_2(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
 	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
 	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
-	torq_current_val = MAX_TORQUE_CONFIG;
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	ctx->torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 }
 
 void assign_mode_3(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
-	select_suspended_mode = 0;
+	ctx->select_suspended_mode = 0;
 	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_3;
 	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_3;
 	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_3;
@@ -462,8 +462,8 @@ void assign_mode_3(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
 	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
 	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
-	torq_current_val = MAX_TORQUE_CONFIG;
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	ctx->torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 }
 
 void set_mode_strings(void){
@@ -715,18 +715,18 @@ static void get_user_mode_index(char * user_string, int * char_mode_select, int 
 void user_configuration(AppControlContext *ctx){
 	int k;
 
-	enable_rotor_actuator_test = 0;
-	enable_rotor_actuator_control = 0;
+	ctx->enable_rotor_actuator_test = 0;
+	ctx->enable_rotor_actuator_control = 0;
 	enable_encoder_test = 0;
 	/* enable_rotor_actuator_high_speed_test removed (write-only, never read) */
-	enable_motor_actuator_characterization_mode = 0;
+	ctx->enable_motor_actuator_characterization_mode = 0;
 	enable_full_sysid = 0;
 
 	enable_rotor_tracking_comb_signal = 0;
 	rotor_track_comb_amplitude = 0;
-	enable_disturbance_rejection_step = 0;
-	enable_noise_rejection_step = 0;
-	enable_sensitivity_fnc_step = 0;
+	ctx->gains.enable_disturbance_rejection_step = 0;
+	ctx->gains.enable_noise_rejection_step = 0;
+	ctx->gains.enable_sensitivity_fnc_step = 0;
 
 
 	while (1){
@@ -746,7 +746,7 @@ void user_configuration(AppControlContext *ctx){
 			sprintf(msg, "\n\rNo Entry Detected - Now Selecting Default Inverted Pendulum Mode 1......: \n\r");
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 			ctx->gains.enable_state_feedback = 0;
-			select_suspended_mode = 0;
+			ctx->select_suspended_mode = 0;
 			ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
 			ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
 			ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
@@ -762,7 +762,7 @@ void user_configuration(AppControlContext *ctx){
 			enable_rotor_chirp = 0;
 			enable_mod_sin_rotor_tracking = 1;
 			enable_angle_cal = 1;
-			enable_swing_up = 1;
+			ctx->enable_swing_up = 1;
 			L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
 			break;
 		}
@@ -791,9 +791,9 @@ void user_configuration(AppControlContext *ctx){
 			enable_pendulum_sysid_test = 0;
 			enable_full_sysid = 0;
 			enable_rotor_tracking_comb_signal = 0;
-			enable_disturbance_rejection_step = 0;
-			enable_noise_rejection_step = 0;
-			enable_sensitivity_fnc_step = 0;
+			ctx->gains.enable_disturbance_rejection_step = 0;
+			ctx->gains.enable_noise_rejection_step = 0;
+			ctx->gains.enable_sensitivity_fnc_step = 0;
 			ctx->plant.enable_rotor_plant_design = 0;
 			ctx->plant.enable_rotor_plant_gain_design = 0;
 
@@ -807,7 +807,7 @@ void user_configuration(AppControlContext *ctx){
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
 				ctx->gains.enable_state_feedback = 0;
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
 				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
 				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
@@ -847,13 +847,13 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-				enable_swing_up = ENABLE_SWING_UP;
+				ctx->enable_swing_up = ENABLE_SWING_UP;
 				enable_swing_up_resp = 0;
 				sprintf(msg, "\n\rSwing Up Enabled - Enter 1 to Disable.....................................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
 				if (enable_swing_up_resp == 1){
-					enable_swing_up = 0;
+					ctx->enable_swing_up = 0;
 				}
 				sprintf(msg, "%i", enable_swing_up_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -951,7 +951,7 @@ void user_configuration(AppControlContext *ctx){
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
 				ctx->gains.enable_state_feedback = 0;
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_2;
 				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_2;
 				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_2;
@@ -1075,7 +1075,7 @@ void user_configuration(AppControlContext *ctx){
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
 				ctx->gains.enable_state_feedback = 0;
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_3;
 				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_3;
 				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_3;
@@ -1112,13 +1112,13 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-				enable_swing_up = ENABLE_SWING_UP;
+				ctx->enable_swing_up = ENABLE_SWING_UP;
 				enable_swing_up_resp = 0;
 				sprintf(msg, "\n\rSwing Up Enabled - Enter 1 to Disable.....................................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
 				if (enable_swing_up_resp == 1){
-					enable_swing_up = 0;
+					ctx->enable_swing_up = 0;
 				}
 				sprintf(msg, "%i", enable_swing_up_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -1207,7 +1207,7 @@ void user_configuration(AppControlContext *ctx){
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
 				ctx->gains.enable_state_feedback = 0;
-				select_suspended_mode = 1;
+				ctx->select_suspended_mode = 1;
 				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_4;
 				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_4;
 				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_4;
@@ -1528,21 +1528,21 @@ void user_configuration(AppControlContext *ctx){
 
 				}
 
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 
 				sprintf(msg, "\n\rEnter 0 for Inverted Mode - Enter 1 for Suspended Mode....................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &select_suspended_mode);
-				sprintf(msg, "%i", select_suspended_mode);
+				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->select_suspended_mode);
+				sprintf(msg, "%i", ctx->select_suspended_mode);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if ( select_suspended_mode < 0 ){
+				if ( ctx->select_suspended_mode < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
 					NVIC_SystemReset();
 				}
 
-				if ( select_suspended_mode == 1 ){
+				if ( ctx->select_suspended_mode == 1 ){
 					enable_angle_cal = 0;
 				}
 
@@ -1568,15 +1568,15 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-				if ( select_suspended_mode == 0 ){
+				if ( ctx->select_suspended_mode == 0 ){
 
-					enable_swing_up = ENABLE_SWING_UP;
+					ctx->enable_swing_up = ENABLE_SWING_UP;
 					enable_swing_up_resp = 0;
 					sprintf(msg, "\n\rSwing Up Enabled - Enter 1 to Disable:....................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
 					if (enable_swing_up_resp == 1){
-						enable_swing_up = 0;
+						ctx->enable_swing_up = 0;
 					}
 					sprintf(msg, "%i", enable_swing_up_resp);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -1680,64 +1680,64 @@ void user_configuration(AppControlContext *ctx){
 					enable_mod_sin_rotor_tracking = 0;
 				}
 
-				enable_disturbance_rejection_step = 0;
-				enable_noise_rejection_step = 0;
-				enable_sensitivity_fnc_step = 0;
+				ctx->gains.enable_disturbance_rejection_step = 0;
+				ctx->gains.enable_noise_rejection_step = 0;
+				ctx->gains.enable_sensitivity_fnc_step = 0;
 
 				sprintf(msg, "\n\rEnter 1 to Enable Disturbance Rejection Sensitivity; 0 to Disable.........: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &enable_disturbance_rejection_step);
-				sprintf(msg, "%i", enable_disturbance_rejection_step);
-				if ( enable_disturbance_rejection_step < 0 ){
+				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.enable_disturbance_rejection_step);
+				sprintf(msg, "%i", ctx->gains.enable_disturbance_rejection_step);
+				if ( ctx->gains.enable_disturbance_rejection_step < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
 					NVIC_SystemReset();
 				}
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if (enable_disturbance_rejection_step == 1) {
-					enable_sensitivity_fnc_step = 0;
+				if (ctx->gains.enable_disturbance_rejection_step == 1) {
+					ctx->gains.enable_sensitivity_fnc_step = 0;
 					enable_rotor_position_step_response_cycle = 1;
-					enable_noise_rejection_step = 0;
+					ctx->gains.enable_noise_rejection_step = 0;
 				}
 
 
 
-				if (enable_disturbance_rejection_step == 0){
+				if (ctx->gains.enable_disturbance_rejection_step == 0){
 					sprintf(msg, "\n\rEnter 1 to Enable Noise Rejection Sensitivity; 0 to Disable...............: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &enable_noise_rejection_step);
-					sprintf(msg, "%i", enable_noise_rejection_step);
+					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.enable_noise_rejection_step);
+					sprintf(msg, "%i", ctx->gains.enable_noise_rejection_step);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( enable_noise_rejection_step < 0 ){
+					if ( ctx->gains.enable_noise_rejection_step < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
 						NVIC_SystemReset();
 					}
-					if (enable_noise_rejection_step == 1) {
-						enable_sensitivity_fnc_step = 0;
+					if (ctx->gains.enable_noise_rejection_step == 1) {
+						ctx->gains.enable_sensitivity_fnc_step = 0;
 						enable_rotor_position_step_response_cycle = 1;
-						enable_disturbance_rejection_step = 0;
+						ctx->gains.enable_disturbance_rejection_step = 0;
 					}
 				}
 
-				if (enable_noise_rejection_step == 0 && enable_disturbance_rejection_step == 0){
+				if (ctx->gains.enable_noise_rejection_step == 0 && ctx->gains.enable_disturbance_rejection_step == 0){
 					sprintf(msg, "\n\rEnter 1 to Enable Sensitivity Function; 0 to Disable......................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &enable_sensitivity_fnc_step);
-					sprintf(msg, "%i", enable_sensitivity_fnc_step);
+					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.enable_sensitivity_fnc_step);
+					sprintf(msg, "%i", ctx->gains.enable_sensitivity_fnc_step);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( enable_sensitivity_fnc_step < 0 ){
+					if ( ctx->gains.enable_sensitivity_fnc_step < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
 						NVIC_SystemReset();
 					}
-					if (enable_sensitivity_fnc_step == 1) {
+					if (ctx->gains.enable_sensitivity_fnc_step == 1) {
 						enable_rotor_position_step_response_cycle = 1;
-						enable_disturbance_rejection_step = 0;
-						enable_noise_rejection_step = 0;
+						ctx->gains.enable_disturbance_rejection_step = 0;
+						ctx->gains.enable_noise_rejection_step = 0;
 					}
 				}
 
@@ -1745,7 +1745,7 @@ void user_configuration(AppControlContext *ctx){
 				 * Reverse polarity of gain values to account for suspended mode angle configuration
 				 */
 
-				if(select_suspended_mode == 1){
+				if(ctx->select_suspended_mode == 1){
 					ctx->gains.proportional = 	-ctx->gains.proportional;
 					ctx->gains.integral = 		-ctx->gains.integral;
 					ctx->gains.derivative = 	-ctx->gains.derivative;
@@ -1779,7 +1779,7 @@ void user_configuration(AppControlContext *ctx){
 						ctx->plant.enable_rotor_plant_design = 1;
 					}
 					if (ctx->plant.enable_rotor_plant_design == 1) {
-						if (select_suspended_mode == 1){
+						if (ctx->select_suspended_mode == 1){
 							sprintf(msg, "\n\rEnter Natural Frequency (rad/sec) of Minimum 0.5 and Maximum 2 ...........: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.rotor_natural_frequency);
@@ -1811,7 +1811,7 @@ void user_configuration(AppControlContext *ctx){
 
 						}
 
-						if (select_suspended_mode == 0 ){
+						if (ctx->select_suspended_mode == 0 ){
 							sprintf(msg, "\n\rEnter Natural Frequency (rad/sec) of Minimum 0.5 and Maximum 2............: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.rotor_natural_frequency);
@@ -1878,7 +1878,7 @@ void user_configuration(AppControlContext *ctx){
 
 
 					if (ctx->plant.enable_rotor_plant_design == 2 || ctx->plant.enable_rotor_plant_design == 3) {
-						if (select_suspended_mode == 1){
+						if (ctx->select_suspended_mode == 1){
 							sprintf(msg, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
@@ -1901,7 +1901,7 @@ void user_configuration(AppControlContext *ctx){
 						}
 
 
-						if (select_suspended_mode == 0){
+						if (ctx->select_suspended_mode == 0){
 							sprintf(msg, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
@@ -1954,7 +1954,7 @@ void user_configuration(AppControlContext *ctx){
 					}
 
 					if (ctx->plant.enable_rotor_plant_design == 2 || ctx->plant.enable_rotor_plant_design == 3) {
-						if (select_suspended_mode == 1){
+						if (ctx->select_suspended_mode == 1){
 							sprintf(msg, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
@@ -1976,7 +1976,7 @@ void user_configuration(AppControlContext *ctx){
 						}
 
 
-						if (select_suspended_mode == 0){
+						if (ctx->select_suspended_mode == 0){
 							sprintf(msg, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
 							HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
@@ -2000,17 +2000,17 @@ void user_configuration(AppControlContext *ctx){
 				}
 
 
-				torq_current_val = MAX_TORQUE_CONFIG;
+				ctx->torq_current_val = MAX_TORQUE_CONFIG;
 
 				if (ENABLE_TORQUE_CURRENT_ENTRY == 1){
 					sprintf(msg, "\n\rEnter Torque Current mA (default is %i)................................: ", (int)MAX_TORQUE_CONFIG);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &torq_current_val);
-					if (torq_current_val == 0){
-						torq_current_val = MAX_TORQUE_CONFIG;
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->torq_current_val);
+					if (ctx->torq_current_val == 0){
+						ctx->torq_current_val = MAX_TORQUE_CONFIG;
 					}
 
-					sprintf(msg, "%0.2f", torq_current_val);
+					sprintf(msg, "%0.2f", ctx->torq_current_val);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				}
 
@@ -2018,7 +2018,7 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.rotor_p_gain, ctx->gains.rotor_i_gain, ctx->gains.rotor_d_gain);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
-				if (select_suspended_mode == 1){
+				if (ctx->select_suspended_mode == 1){
 					sprintf(msg, "\n\rSuspended Mode gain values must be negative or zero");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				}
@@ -2099,7 +2099,7 @@ void user_configuration(AppControlContext *ctx){
 				 * Only inverted mode is supported in Single PID Mode
 				 */
 
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 
 				enable_rotor_position_step_response_cycle = 0;
 				enable_mod_sin_rotor_tracking = 0;
@@ -2125,13 +2125,13 @@ void user_configuration(AppControlContext *ctx){
 				}
 
 
-				enable_swing_up = ENABLE_SWING_UP;
+				ctx->enable_swing_up = ENABLE_SWING_UP;
 				enable_swing_up_resp = 0;
 				sprintf(msg, "\n\rSwing Up Enabled - Enter 1 to Disable ................................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
 				if (enable_swing_up_resp == 1){
-					enable_swing_up = 0;
+					ctx->enable_swing_up = 0;
 				}
 				sprintf(msg, "%i", enable_swing_up_resp);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -2207,7 +2207,7 @@ void user_configuration(AppControlContext *ctx){
 				/*
 				 * Reverse polarity of gain values to account for suspended mode angle configuration
 				 */
-				if(select_suspended_mode == 1){
+				if(ctx->select_suspended_mode == 1){
 					ctx->gains.proportional = 	-ctx->gains.proportional;
 					ctx->gains.integral = 		-ctx->gains.integral;
 					ctx->gains.derivative = 	-ctx->gains.derivative;
@@ -2223,7 +2223,7 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.rotor_p_gain, ctx->gains.rotor_i_gain, ctx->gains.rotor_d_gain);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
-				if (select_suspended_mode == 1){
+				if (ctx->select_suspended_mode == 1){
 					sprintf(msg, "\n\rSuspended Mode gains must be negative");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				}
@@ -2233,7 +2233,7 @@ void user_configuration(AppControlContext *ctx){
 				/* Rotor actuator and encoder test mode */
 
 			case 11:
-				enable_rotor_actuator_test = 1;
+				ctx->enable_rotor_actuator_test = 1;
 				enable_encoder_test = 1;
 				sprintf(msg, "\n\rTest Mode Configured");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
@@ -2242,7 +2242,7 @@ void user_configuration(AppControlContext *ctx){
 
 				/* Rotor actuator characterization test mode */
 			case 13:
-				enable_motor_actuator_characterization_mode = 1;
+				ctx->enable_motor_actuator_characterization_mode = 1;
 				sprintf(msg, "\n\rMotor Characterization Mode Configured");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg), HAL_MAX_DELAY);
 
@@ -2250,7 +2250,7 @@ void user_configuration(AppControlContext *ctx){
 				rotor_test_speed_max = 1000;
 				rotor_test_acceleration_max = 3000;
 				swing_deceleration_max = 3000;
-				torq_current_val = MAX_TORQUE_CONFIG;
+				ctx->torq_current_val = MAX_TORQUE_CONFIG;
 				rotor_chirp_amplitude = 5;
 				rotor_chirp_start_freq = 0.05;
 				rotor_chirp_end_freq = 5;
@@ -2267,7 +2267,7 @@ void user_configuration(AppControlContext *ctx){
 
 				/* Rotor actuator control mode */
 			case 15:
-				enable_rotor_actuator_control = 1;
+				ctx->enable_rotor_actuator_control = 1;
 				sprintf(msg, "\n\rRotor Actuator Control Mode Configured");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 						strlen(msg), HAL_MAX_DELAY);
@@ -2286,7 +2286,7 @@ void user_configuration(AppControlContext *ctx){
 			case 19:
 				enable_full_sysid = 1;
 
-				select_suspended_mode = 1;
+				ctx->select_suspended_mode = 1;
 				ctx->gains.proportional = 0;
 				ctx->gains.integral = 0;
 				ctx->gains.derivative = 0;
@@ -2390,7 +2390,7 @@ void user_configuration(AppControlContext *ctx){
 			default:
 
 				ctx->gains.enable_state_feedback = 0;
-				select_suspended_mode = 0;
+				ctx->select_suspended_mode = 0;
 				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
 				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
 				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;

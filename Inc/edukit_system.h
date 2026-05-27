@@ -585,7 +585,7 @@ extern int angle_cal_end;
 extern int angle_cal_complete;
 
 /* Swing Up system variables */
-extern int enable_swing_up;
+/* enable_swing_up → ctx field */
 /* enable_swing_up_resp → ui.c static */
 /* peaked, handled_peak, zero_crossed,
    max/global/prev_global_max/previous_encoder_position → hardware.c static (via hardware_swing_up_*) */
@@ -602,7 +602,7 @@ extern float encoder_angle_slope_corr_steps;
 /* adaptive_error, adaptive_threshold_low/high → write-only, removed */
 /* error_sum_prev/filter_prev, error_sum, error_sum_filter → write-only, removed */
 /* adaptive_entry_tick, adaptive_dwell_period → write-only, removed */
-extern int enable_adaptive_mode, adaptive_state, adaptive_state_change;
+/* enable_adaptive_mode, adaptive_state, adaptive_state_change → ctx fields */
 extern float rotor_position_command_steps_prev;
 
 /* Rotor impulse variables */
@@ -611,16 +611,14 @@ extern int impulse_start_index;
 
 /* User configuration variables */
 /* clear_input → unreferenced, removed */
-extern uint32_t enable_control_action;
+/* enable_control_action, select_suspended_mode → ctx fields */
 /* max_speed_read, min_speed_read → unreferenced, removed */
-extern int select_suspended_mode;
 /* motor_response_model → unreferenced, removed */
-extern int enable_rotor_actuator_test, enable_rotor_actuator_control;
+/* enable_rotor_actuator_test, enable_rotor_actuator_control → ctx fields */
 /* enable_encoder_test → ui.c static */
 /* enable_rotor_actuator_high_speed_test → write-only, removed */
-extern int enable_motor_actuator_characterization_mode;
+/* enable_motor_actuator_characterization_mode, torq_current_val → ctx fields */
 /* motor_state → ui.c static */
-extern float torq_current_val;
 
 
 /* Rotor chirp system variables */
@@ -673,12 +671,10 @@ extern float rotor_track_comb_signal_frequency;
 extern float rotor_track_comb_command;
 extern float rotor_track_comb_amplitude;
 
-/* Sensitivity function system variables */
-extern int enable_disturbance_rejection_step;
-extern int enable_noise_rejection_step;
+/* Sensitivity function system variables → ctx->gains (PidGainSet) */
+/* enable_disturbance_rejection_step, enable_noise_rejection_step → ctx->gains */
 /* enable_plant_rejection_step → unreferenced, removed */
-extern int enable_sensitivity_fnc_step;
-extern float load_disturbance_sensitivity_scale;
+/* enable_sensitivity_fnc_step, load_disturbance_sensitivity_scale → ctx->gains */
 
 
 

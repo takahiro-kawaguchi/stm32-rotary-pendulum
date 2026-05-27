@@ -44,7 +44,7 @@ void app_prepare_control_session(AppControlContext *ctx)
 {
 	BSP_MotorControl_SoftStop(0);
 	BSP_MotorControl_WaitWhileActive(0);
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 	BSP_MotorControl_SetMaxSpeed(0, max_speed);
 	BSP_MotorControl_SetMinSpeed(0, min_speed);
 	BSP_MotorControl_SetAcceleration(0, MAX_ACCEL);
@@ -55,25 +55,25 @@ void app_prepare_control_session(AppControlContext *ctx)
 				min_speed, max_speed);
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
-	if (select_suspended_mode == 0) {
+	if (ctx->select_suspended_mode == 0) {
 		sprintf(msg, "\n\rInverted Pendulum Mode Selected");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
-	if (select_suspended_mode == 1) {
+	if (ctx->select_suspended_mode == 1) {
 		sprintf(msg, "\n\rSuspended Pendulum Mode Selected");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
 
-	sprintf(msg, "\n\rMotor Torque Current Set at %0.1f mA", torq_current_val);
+	sprintf(msg, "\n\rMotor Torque Current Set at %0.1f mA", ctx->torq_current_val);
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-	if (enable_motor_actuator_characterization_mode == 1) {
+	if (ctx->enable_motor_actuator_characterization_mode == 1) {
 		motor_actuator_characterization_mode(ctx);
 	}
-	if (enable_rotor_actuator_control == 1) {
+	if (ctx->enable_rotor_actuator_control == 1) {
 		interactive_rotor_actuator_control();
 	}
-	if (enable_rotor_actuator_test == 1) {
+	if (ctx->enable_rotor_actuator_test == 1) {
 		rotor_encoder_test(ctx);
 	}
 
@@ -114,7 +114,7 @@ void app_run_control_session(AppControlContext *ctx)
 	int swing_up_state;
 	int stage_count, stage_amp;
 
-	enable_control_action = ENABLE_CONTROL_ACTION;
+	ctx->enable_control_action = ENABLE_CONTROL_ACTION;
 
 	if (ctx->reset_state == 1) {
 		hardware_rotor_home();
@@ -199,7 +199,7 @@ void app_run_control_session(AppControlContext *ctx)
 	sprintf(msg, "Pendulum Initial Angle %i\r\n", encoder_position_steps);
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-	if (enable_swing_up == 0) {
+	if (ctx->enable_swing_up == 0) {
 		BSP_MotorControl_GoTo(0, 30);
 		BSP_MotorControl_WaitWhileActive(0);
 		HAL_Delay(150);
@@ -212,16 +212,16 @@ void app_run_control_session(AppControlContext *ctx)
 		BSP_MotorControl_GoTo(0, 0);
 		BSP_MotorControl_WaitWhileActive(0);
 
-		if (select_suspended_mode == 0) {
+		if (ctx->select_suspended_mode == 0) {
 			sprintf(msg,
 					"Adjust Pendulum Upright By Turning CCW Control Will Start When Vertical\r\n");
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		}
 	}
 
-	if (enable_swing_up == 0) {
+	if (ctx->enable_swing_up == 0) {
 		uint32_t tick_wait_start = HAL_GetTick();
-		if (select_suspended_mode == 0) {
+		if (ctx->select_suspended_mode == 0) {
 			while (1) {
 				ret = hardware_encoder_position_read(&encoder_position_steps,
 						encoder_position_init, &htim3);
@@ -247,14 +247,14 @@ void app_run_control_session(AppControlContext *ctx)
 							"Pendulum Upright Action Not Detected - Restarting ...\r\n");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 							HAL_MAX_DELAY);
-					enable_control_action = 0;
+					ctx->enable_control_action = 0;
 					break;
 				}
 			}
 		}
 	}
 
-	if (select_suspended_mode == 1) {
+	if (ctx->select_suspended_mode == 1) {
 		sprintf(msg, "Suspended Mode Control Will Start in %i Seconds\r\n",
 				(int) (CONTROL_START_DELAY / 1000));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -278,7 +278,7 @@ void app_run_control_session(AppControlContext *ctx)
 	rotor_sine_drive = 0;
 	sine_drive_transition = 0;
 	rotor_mod_control = 1.0;
-	enable_adaptive_mode = 0;
+	ctx->enable_adaptive_mode = 0;
 	tick_cycle_start = HAL_GetTick();
 	tick_cycle_previous = tick_cycle_start;
 	tick_cycle_current = tick_cycle_start;
@@ -288,7 +288,7 @@ void app_run_control_session(AppControlContext *ctx)
 	pendulum_position_command_steps = 0;
 	impulse_start_index = 0;
 	ctx->mode_transition_state = 0;
-	adaptive_state = 4;
+	ctx->adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
 	rotor_position_command_steps_pf_prev = 0;
 	ctx->enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
@@ -318,20 +318,20 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->init_params.enable_state_feedback           = ctx->gains.enable_state_feedback;
 	ctx->init_params.integral_compensator_gain       = ctx->gains.integral_compensator_gain;
 	ctx->init_params.feedforward_gain                = ctx->gains.feedforward_gain;
-	ctx->init_params.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
-	ctx->init_params.enable_sensitivity_fnc_step     = enable_sensitivity_fnc_step;
-	ctx->init_params.enable_noise_rejection_step     = enable_noise_rejection_step;
+	ctx->init_params.enable_disturbance_rejection_step = ctx->gains.enable_disturbance_rejection_step;
+	ctx->init_params.enable_sensitivity_fnc_step     = ctx->gains.enable_sensitivity_fnc_step;
+	ctx->init_params.enable_noise_rejection_step     = ctx->gains.enable_noise_rejection_step;
 	ctx->init_params.enable_rotor_plant_design       = ctx->plant.enable_rotor_plant_design;
 	ctx->init_params.enable_rotor_plant_gain_design  = ctx->plant.enable_rotor_plant_gain_design;
 
-	if (select_suspended_mode == 1) {
-		load_disturbance_sensitivity_scale = 1.0;
+	if (ctx->select_suspended_mode == 1) {
+		ctx->gains.load_disturbance_sensitivity_scale = 1.0;
 	}
-	if (select_suspended_mode == 0) {
-		load_disturbance_sensitivity_scale = LOAD_DISTURBANCE_SENSITIVITY_SCALE;
+	if (ctx->select_suspended_mode == 0) {
+		ctx->gains.load_disturbance_sensitivity_scale = LOAD_DISTURBANCE_SENSITIVITY_SCALE;
 	}
 
-	if (enable_swing_up == 1 && select_suspended_mode == 0) {
+	if (ctx->enable_swing_up == 1 && ctx->select_suspended_mode == 0) {
 		ctx->core_ctl_state.PID_Rotor.Kp = 20;
 		ctx->core_ctl_state.PID_Rotor.Ki = 10;
 		ctx->core_ctl_state.PID_Rotor.Kd = 10;
@@ -343,14 +343,14 @@ void app_run_control_session(AppControlContext *ctx)
 		ctx->gains.feedforward_gain = 1;
 		rotor_position_command_steps = 0;
 		ctx->gains.enable_state_feedback = 0;
-		enable_disturbance_rejection_step = 0;
-		enable_sensitivity_fnc_step = 0;
-		enable_noise_rejection_step = 0;
+		ctx->gains.enable_disturbance_rejection_step = 0;
+		ctx->gains.enable_sensitivity_fnc_step = 0;
+		ctx->gains.enable_noise_rejection_step = 0;
 		ctx->plant.enable_rotor_plant_design = 0;
 		ctx->plant.enable_rotor_plant_gain_design = 0;
 
-		torq_current_val = MAX_TORQUE_SWING_UP;
-		L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+		ctx->torq_current_val = MAX_TORQUE_SWING_UP;
+		L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 
 		sprintf(msg, "Pendulum Swing Up Starting\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
@@ -420,7 +420,7 @@ void app_run_control_session(AppControlContext *ctx)
 		}
 	}
 
-	enable_control_action = 1;
+	ctx->enable_control_action = 1;
 
 	if (ACCEL_CONTROL == 1) {
 		BSP_MotorControl_HardStop(0);
@@ -429,15 +429,15 @@ void app_run_control_session(AppControlContext *ctx)
 		L6474_Board_SetDirectionGpio(0, BACKWARD);
 	}
 
-	torq_current_val = MAX_TORQUE_CONFIG;
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	ctx->torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 
 	ctx->timing.target_cpu_cycle = DWT->CYCCNT;
 	ctx->timing.prev_cpu_cycle = DWT->CYCCNT;
 
 	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
 			&htim3);
-	if (select_suspended_mode == 0) {
+	if (ctx->select_suspended_mode == 0) {
 		encoder_position = encoder_position_steps - encoder_position_down
 				- (int) (180 * ctx->angle_scale);
 		encoder_position = encoder_position - encoder_position_offset;
@@ -445,7 +445,7 @@ void app_run_control_session(AppControlContext *ctx)
 
 	app_init_control_pipeline(ctx, encoder_position_init, Tsample);
 
-	while (enable_control_action == 1) {
+	while (ctx->enable_control_action == 1) {
 		ret = control_handle_runtime_configuration(ctx, i);
 		if (ret < 0) {
 			break;

@@ -31,9 +31,9 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	mod_sin_amplitude = MOD_SIN_AMPLITUDE;
 	rotor_control_sin_amplitude = MOD_SIN_AMPLITUDE;
 
-	enable_disturbance_rejection_step = 0;
-	enable_noise_rejection_step = 0;
-	enable_sensitivity_fnc_step = 0;
+	ctx->gains.enable_disturbance_rejection_step = 0;
+	ctx->gains.enable_noise_rejection_step = 0;
+	ctx->gains.enable_sensitivity_fnc_step = 0;
 	enable_pendulum_position_impulse_response_cycle = 0;
 
 	ctx->adjust_increment = 0.5;
@@ -41,7 +41,7 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 
 	HAL_Init();
 	SystemClock_Config();
-	select_suspended_mode = ENABLE_SUSPENDED_PENDULUM_CONTROL;
+	ctx->select_suspended_mode = ENABLE_SUSPENDED_PENDULUM_CONTROL;
 
 	BSP_MotorControl_SetNbDevices(BSP_MOTOR_CONTROL_BOARD_ID_L6474, 1);
 	BSP_MotorControl_Init(BSP_MOTOR_CONTROL_BOARD_ID_L6474, motor_init);
@@ -79,8 +79,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	BSP_MotorControl_SetDeceleration(0, max_decel);
 	HAL_Delay(1);
 
-	torq_current_val = MAX_TORQUE_CONFIG;
-	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	ctx->torq_current_val = MAX_TORQUE_CONFIG;
+	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 
 	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_1;
 	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_1;
@@ -91,7 +91,7 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	ctx->gains.enable_state_feedback = 1;
 	ctx->gains.integral_compensator_gain = 0;
 	ctx->gains.feedforward_gain = 1;
-	enable_adaptive_mode = 0;
+	ctx->enable_adaptive_mode = 0;
 
 	HAL_UART_Receive_DMA(&huart2, RxBuffer, UART_RX_BUFFER_SIZE);
 	BSP_MotorControl_AttachFlagInterrupt(MyFlagInterruptHandler);
@@ -147,7 +147,7 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	sprintf(msg, "\n\rSystem Starting Prepare to Enter Mode Selection... ");
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-	enable_adaptive_mode = ENABLE_ADAPTIVE_MODE;
-	adaptive_state = ADAPTIVE_STATE;
-	adaptive_state_change = 0;
+	ctx->enable_adaptive_mode = ENABLE_ADAPTIVE_MODE;
+	ctx->adaptive_state = ADAPTIVE_STATE;
+	ctx->adaptive_state_change = 0;
 }

@@ -208,11 +208,11 @@ static void reference_update(AppControlContext *ctx, int i)
 	if (enable_pendulum_position_impulse_response_cycle == 1 && i != 0
 			&& i > angle_cal_complete) {
 		if ((i % PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_INTERVAL) == 0) {
-			if (select_suspended_mode == 1) {
+			if (ctx->select_suspended_mode == 1) {
 				pendulum_position_command_steps =
 						(float) PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE;
 			}
-			if (select_suspended_mode == 0) {
+			if (ctx->select_suspended_mode == 0) {
 				pendulum_position_command_steps =
 						(float) (PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE
 								/ PENDULUM_POSITION_IMPULSE_AMPLITUDE_SCALE);
@@ -268,7 +268,7 @@ static void reference_update(AppControlContext *ctx, int i)
 static void angle_cal_update(AppControlContext *ctx, int i)
 {
 	if (enable_angle_cal == 1) {
-		if (i == 1 && select_suspended_mode == 0) {
+		if (i == 1 && ctx->select_suspended_mode == 0) {
 			ctx->core_ctl_state.PID_Rotor.Kp = 21.1;
 			ctx->core_ctl_state.PID_Rotor.Ki = 0;
 			ctx->core_ctl_state.PID_Rotor.Kd = 17.2;
@@ -281,7 +281,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			rotor_position_command_steps = 0;
 			ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		}
-		if (i == 1 && select_suspended_mode == 1) {
+		if (i == 1 && ctx->select_suspended_mode == 1) {
 			ctx->core_ctl_state.PID_Rotor.Kp = -23.86;
 			ctx->core_ctl_state.PID_Rotor.Ki = 0;
 			ctx->core_ctl_state.PID_Rotor.Kd = -19.2;
@@ -390,9 +390,9 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 		ctx->gains.enable_state_feedback           = ctx->init_params.enable_state_feedback;
 		ctx->gains.integral_compensator_gain       = ctx->init_params.integral_compensator_gain;
 		ctx->gains.feedforward_gain                = ctx->init_params.feedforward_gain;
-		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
-		enable_sensitivity_fnc_step     = ctx->init_params.enable_sensitivity_fnc_step;
-		enable_noise_rejection_step     = ctx->init_params.enable_noise_rejection_step;
+		ctx->gains.enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
+		ctx->gains.enable_sensitivity_fnc_step     = ctx->init_params.enable_sensitivity_fnc_step;
+		ctx->gains.enable_noise_rejection_step     = ctx->init_params.enable_noise_rejection_step;
 		ctx->plant.enable_rotor_plant_design = ctx->init_params.enable_rotor_plant_design;
 	}
 }
@@ -463,16 +463,16 @@ static void report_data(AppControlContext *ctx, int i)
 		}
 	}
 
-	if (enable_disturbance_rejection_step == 1) {
-		display_parameter = rotor_position_steps / load_disturbance_sensitivity_scale;
-	} else if (enable_noise_rejection_step == 1) {
+	if (ctx->gains.enable_disturbance_rejection_step == 1) {
+		display_parameter = rotor_position_steps / ctx->gains.load_disturbance_sensitivity_scale;
+	} else if (ctx->gains.enable_noise_rejection_step == 1) {
 		noise_rej_signal = rotor_control_target_steps;
-	} else if (enable_sensitivity_fnc_step == 1) {
+	} else if (ctx->gains.enable_sensitivity_fnc_step == 1) {
 		display_parameter = rotor_position_command_steps - rotor_position_steps;
 	} else {
 		display_parameter = rotor_position_steps;
 	}
-	if (enable_noise_rejection_step == 1) {
+	if (ctx->gains.enable_noise_rejection_step == 1) {
 		display_parameter = noise_rej_signal;
 	}
 
@@ -508,10 +508,10 @@ static void report_data(AppControlContext *ctx, int i)
 		}
 		if (ctx->report_mode == 2000) {
 			sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\r\n", (int) 1,
-					(int) torq_current_val, max_accel, max_decel,
-					enable_disturbance_rejection_step, enable_noise_rejection_step,
+					(int) ctx->torq_current_val, max_accel, max_decel,
+					ctx->gains.enable_disturbance_rejection_step, ctx->gains.enable_noise_rejection_step,
 					enable_rotor_position_step_response_cycle, (int) (ctx->adjust_increment * 10),
-					enable_sensitivity_fnc_step);
+					ctx->gains.enable_sensitivity_fnc_step);
 			ctx->report_mode = 0;
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		}

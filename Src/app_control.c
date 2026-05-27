@@ -85,7 +85,7 @@ void control_shutdown_sequence(AppControlContext *ctx)
 
 int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 {
-	if (enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && enable_angle_cal == 0) {
+	if (ctx->enable_swing_up == 1 && i == SWING_UP_CONTROL_CONFIG_DELAY && enable_angle_cal == 0) {
 		ctx->core_ctl_state.PID_Rotor.Kp = ctx->init_params.Kp_rotor;
 		ctx->core_ctl_state.PID_Rotor.Ki = ctx->init_params.Ki_rotor;
 		ctx->core_ctl_state.PID_Rotor.Kd = ctx->init_params.Kd_rotor;
@@ -95,9 +95,9 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		ctx->gains.enable_state_feedback             = ctx->init_params.enable_state_feedback;
 		ctx->gains.integral_compensator_gain         = ctx->init_params.integral_compensator_gain;
 		ctx->gains.feedforward_gain                  = ctx->init_params.feedforward_gain;
-		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
-		enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
-		enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
+		ctx->gains.enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
+		ctx->gains.enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
+		ctx->gains.enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
 		ctx->plant.enable_rotor_plant_design         = ctx->init_params.enable_rotor_plant_design;
 		ctx->plant.enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
 	}
@@ -119,7 +119,7 @@ int control_update_state_and_safety(AppControlContext *ctx)
 {
 	ctx->core_hw_cal.encoder_down_counts = encoder_position_down;
 	ctx->core_hw_cal.encoder_offset_counts = (float) encoder_position_offset;
-	ctx->core_hw_cal.select_suspended_mode = select_suspended_mode;
+	ctx->core_hw_cal.select_suspended_mode = ctx->select_suspended_mode;
 
 	hardware_sensor_read(&ctx->core_hw_raw, NULL);
 	ctx->core_observer_ops->update(&ctx->core_hw_raw, &ctx->core_hw_cal,
@@ -129,7 +129,7 @@ int control_update_state_and_safety(AppControlContext *ctx)
 	rotor_position_steps = ctx->core_hw_raw.rotor_steps;
 	encoder_position = (int) (ctx->core_sys_state.pendulum_angle_rad / ENCODER_RAD_PER_COUNT);
 
-	if (select_suspended_mode == 0) {
+	if (ctx->select_suspended_mode == 0) {
 		if ((encoder_position / ENCODER_READ_ANGLE_SCALE) > ENCODER_POSITION_POSITIVE_LIMIT
 				|| (encoder_position / ENCODER_READ_ANGLE_SCALE) < ENCODER_POSITION_NEGATIVE_LIMIT) {
 			sprintf(msg, "Error Exit Encoder Position Exceeded: %i\r\n",
@@ -155,10 +155,10 @@ void control_update_slope_correction(AppControlContext *ctx, int i)
 {
 	rotor_position_diff_prev = rotor_position_diff;
 
-	if (enable_disturbance_rejection_step == 0) {
+	if (ctx->gains.enable_disturbance_rejection_step == 0) {
 		rotor_position_diff = rotor_position_filter_steps - rotor_position_command_steps;
 	}
-	if (enable_disturbance_rejection_step == 1) {
+	if (ctx->gains.enable_disturbance_rejection_step == 1) {
 		rotor_position_diff = rotor_position_filter_steps;
 	}
 
@@ -183,12 +183,12 @@ void control_update_dual_pid(AppControlContext *ctx)
 	input.rotor_position_command_steps = rotor_position_command_steps;
 	input.feedforward_gain = ctx->gains.feedforward_gain;
 	input.integral_compensator_gain = ctx->gains.integral_compensator_gain;
-	input.load_disturbance_sensitivity_scale = load_disturbance_sensitivity_scale;
+	input.load_disturbance_sensitivity_scale = ctx->gains.load_disturbance_sensitivity_scale;
 	input.sample_period_rotor_s = Tsample_rotor;
 	input.enable_state_feedback = ctx->gains.enable_state_feedback;
-	input.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
-	input.enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
-	input.enable_noise_rejection_step = enable_noise_rejection_step;
+	input.enable_disturbance_rejection_step = ctx->gains.enable_disturbance_rejection_step;
+	input.enable_sensitivity_fnc_step = ctx->gains.enable_sensitivity_fnc_step;
+	input.enable_noise_rejection_step = ctx->gains.enable_noise_rejection_step;
 
 	if (ctx->core_controller_ops->compute_dual != NULL) {
 		ctx->core_controller_ops->compute_dual(&ctx->core_ctl_state,

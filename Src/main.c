@@ -278,7 +278,7 @@ int angle_cal_end;
 int angle_cal_complete;
 
 /* Swing Up system variables */
-int enable_swing_up;
+/* enable_swing_up → ctx field */
 /* enable_swing_up_resp → ui.c static */
 /* peaked, handled_peak, zero_crossed,
    max/global/prev_global_max_encoder_position, previous_encoder_position → hardware.c static */
@@ -294,7 +294,7 @@ float encoder_angle_slope_corr_steps;
 /* adaptive_error, adaptive_threshold_low/high, error_sum_prev, error_sum,
    error_sum_filter_prev, error_sum_filter, adaptive_entry_tick,
    adaptive_dwell_period → removed (write-only, never read) */
-int enable_adaptive_mode, adaptive_state, adaptive_state_change;
+/* enable_adaptive_mode, adaptive_state, adaptive_state_change → ctx fields */
 
 /* Rotor impulse variables */
 int rotor_position_step_polarity;
@@ -304,11 +304,9 @@ int impulse_start_index;
 /* clear_input, max_speed_read, min_speed_read, motor_response_model,
    enable_rotor_actuator_high_speed_test → removed (never referenced) */
 /* enable_encoder_test, motor_state → ui.c static */
-uint32_t enable_control_action;
-int select_suspended_mode;
-int enable_rotor_actuator_test, enable_rotor_actuator_control;
-int enable_motor_actuator_characterization_mode;
-float torq_current_val;
+/* enable_control_action, select_suspended_mode → ctx fields */
+/* enable_rotor_actuator_test, enable_rotor_actuator_control → ctx fields */
+/* enable_motor_actuator_characterization_mode, torq_current_val → ctx fields */
 
 
 /* Rotor chirp system variables */
@@ -361,12 +359,7 @@ float rotor_track_comb_signal_frequency;
 float rotor_track_comb_command;
 float rotor_track_comb_amplitude;
 
-/* Sensitivity function system variables */
-int enable_disturbance_rejection_step;
-int enable_noise_rejection_step;
-/* enable_plant_rejection_step → removed (never referenced) */
-int enable_sensitivity_fnc_step;
-float load_disturbance_sensitivity_scale;
+/* Sensitivity function system variables → ctx->gains (PidGainSet) */
 
 /* noise_rej_signal → local in control_execute_cycle */
 /* adjust_increment, report_mode, speed_scale, speed_governor, mode_transition_state → ctx fields */

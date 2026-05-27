@@ -16,6 +16,10 @@ typedef struct {
 	int   enable_state_feedback;
 	float integral_compensator_gain;
 	float feedforward_gain;
+	int   enable_disturbance_rejection_step;
+	int   enable_noise_rejection_step;
+	int   enable_sensitivity_fnc_step;
+	float load_disturbance_sensitivity_scale;
 } PidGainSet;
 
 /*
@@ -92,6 +96,16 @@ typedef struct AppControlContext {
 	int   speed_scale;
 	int   speed_governor;
 	int   mode_transition_state;
+	int   select_suspended_mode;
+	int   enable_swing_up;
+	uint32_t enable_control_action;
+	int   enable_adaptive_mode;
+	int   adaptive_state;
+	int   adaptive_state_change;
+	int   enable_rotor_actuator_test;
+	int   enable_rotor_actuator_control;
+	int   enable_motor_actuator_characterization_mode;
+	float torq_current_val;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;
