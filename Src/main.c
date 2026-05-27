@@ -236,10 +236,6 @@ int cycle_count;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
 /* PID control system variables */
-float windup, rotor_windup;
-static float _current_error_steps, _current_error_rotor_steps;
-float *current_error_steps     = &_current_error_steps;
-float *current_error_rotor_steps = &_current_error_rotor_steps;
 static float _sample_period, _sample_period_rotor;
 float *sample_period       = &_sample_period;
 float *sample_period_rotor = &_sample_period_rotor;
@@ -261,8 +257,6 @@ float derivative, rotor_d_gain;
 int enable_state_feedback;
 float integral_compensator_gain;
 float feedforward_gain;
-float current_error_rotor_integral;
-
 /* Reference tracking command */
 float reference_tracking_command;
 

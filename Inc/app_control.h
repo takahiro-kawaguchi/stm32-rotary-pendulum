@@ -46,6 +46,7 @@ typedef struct AppControlContext {
 	CommandShaperState core_cmd_shaper_state;
 	SessionInitialParams init_params;
 	LoopTimingState timing;
+	ControllerDualPidRuntime core_dual_pid_runtime;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;

@@ -178,7 +178,6 @@ void control_update_slope_correction(int i)
 void control_update_dual_pid(AppControlContext *ctx)
 {
 	ControllerDualPidInput input;
-	ControllerDualPidRuntime runtime;
 
 	input.rotor_position_filter_steps = rotor_position_filter_steps;
 	input.rotor_position_command_steps = rotor_position_command_steps;
@@ -191,22 +190,17 @@ void control_update_dual_pid(AppControlContext *ctx)
 	input.enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
 	input.enable_noise_rejection_step = enable_noise_rejection_step;
 
-	runtime.current_error_rotor_steps = *current_error_rotor_steps;
-	runtime.current_error_rotor_integral = current_error_rotor_integral;
-
 	if (ctx->core_controller_ops->compute_dual != NULL) {
 		ctx->core_controller_ops->compute_dual(&ctx->core_ctl_state,
-				&ctx->core_sys_state, &ctx->core_ctl_target, &input, &runtime,
-				&ctx->core_ctl_out);
+				&ctx->core_sys_state, &ctx->core_ctl_target, &input,
+				&ctx->core_dual_pid_runtime, &ctx->core_ctl_out);
 	} else {
 		ctx->core_ctl_target.rotor_angle_ref_rad = ctx->core_sys_state.rotor_angle_rad
-				- (*current_error_rotor_steps) * STEPPER_RAD_PER_STEP;
+				- ctx->core_dual_pid_runtime.current_error_rotor_steps * STEPPER_RAD_PER_STEP;
 		ctx->core_controller_ops->compute(&ctx->core_ctl_state,
 				&ctx->core_sys_state, &ctx->core_ctl_target, &ctx->core_ctl_out);
 	}
 
-	*current_error_rotor_steps = runtime.current_error_rotor_steps;
-	current_error_rotor_integral = runtime.current_error_rotor_integral;
 	rotor_control_target_steps = ctx->core_ctl_out.rotor_accel_steps_s2;
 }
 

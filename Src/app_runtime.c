@@ -37,11 +37,11 @@ static void control_prepare_targets_and_filters(AppControlContext *ctx, int i)
 		encoder_position = encoder_position - ENCODER_START_OFFSET;
 	}
 
-	*current_error_steps = encoder_angle_slope_corr_steps
+	float current_error_steps = encoder_angle_slope_corr_steps
 			+ ENCODER_ANGLE_POLARITY
 					* (encoder_position / ((float) (ENCODER_READ_ANGLE_SCALE
 							/ STEPPER_READ_POSITION_STEPS_PER_DEGREE)));
-	*current_error_steps = *current_error_steps + pendulum_position_command_steps;
+	current_error_steps = current_error_steps + pendulum_position_command_steps;
 
 	ctx->core_ctl_target.slope_correction_steps = encoder_angle_slope_corr_steps;
 	ctx->core_ctl_target.pendulum_cmd_steps = pendulum_position_command_steps;
@@ -279,7 +279,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			integral_compensator_gain = 10;
 			feedforward_gain = 1;
 			rotor_position_command_steps = 0;
-			current_error_rotor_integral = 0;
+			ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		}
 		if (i == 1 && select_suspended_mode == 1) {
 			ctx->core_ctl_state.PID_Rotor.Kp = -23.86;
@@ -292,7 +292,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			integral_compensator_gain = -11.45;
 			feedforward_gain = 1;
 			rotor_position_command_steps = 0;
-			current_error_rotor_integral = 0;
+			ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		}
 		if (i == 1) {
 			offset_end_state = 0;
@@ -386,7 +386,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 		ctx->core_ctl_state.PID_Pend.Kp  = ctx->init_params.Kp_pend;
 		ctx->core_ctl_state.PID_Pend.Ki  = ctx->init_params.Ki_pend;
 		ctx->core_ctl_state.PID_Pend.Kd  = ctx->init_params.Kd_pend;
-		current_error_rotor_integral = 0;
+		ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		enable_state_feedback           = ctx->init_params.enable_state_feedback;
 		integral_compensator_gain       = ctx->init_params.integral_compensator_gain;
 		feedforward_gain                = ctx->init_params.feedforward_gain;

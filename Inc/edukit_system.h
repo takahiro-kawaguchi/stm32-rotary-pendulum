@@ -544,8 +544,6 @@ extern float rotor_control_target_steps_curr;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
 /* PID control system variables */
-extern float windup, rotor_windup;
-extern float *current_error_steps, *current_error_rotor_steps;
 extern float *sample_period, *sample_period_rotor;
 
 /* Loop timing measurement variables */
@@ -564,8 +562,6 @@ extern float derivative, rotor_d_gain;
 extern int enable_state_feedback;
 extern float integral_compensator_gain;
 extern float feedforward_gain;
-extern float current_error_rotor_integral;
-
 /* Reference tracking command */
 extern float reference_tracking_command;
 

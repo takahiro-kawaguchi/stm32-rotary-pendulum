@@ -17,7 +17,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	rotor_control_target_steps = 0;
 	rotor_control_target_steps_curr = 0;
 	app_reset_command_shaper_state(ctx);
-	current_error_rotor_integral = 0;
+	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
+	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
 
 	enable_rotor_chirp = 0;
 	rotor_chirp_start_freq = ROTOR_CHIRP_START_FREQ;
@@ -124,8 +125,6 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	assert(RCC_SYS_CLOCK_FREQ == HAL_RCC_GetSysClockFreq());
 	assert(RCC_HCLK_FREQ == HAL_RCC_GetHCLKFreq());
 
-	windup = PRIMARY_WINDUP_LIMIT;
-	rotor_windup = SECONDARY_WINDUP_LIMIT;
 
 	fo = LP_CORNER_FREQ_ROTOR;
 	Wo = 2 * 3.141592654 * fo;

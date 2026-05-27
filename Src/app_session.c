@@ -260,8 +260,8 @@ void app_run_control_session(AppControlContext *ctx)
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 	}
 
-	*current_error_steps = 0;
-	*current_error_rotor_steps = 0;
+	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
+	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 
 	ctx->timing.cycle_count = CYCLE_LIMIT;
 	rotor_position_steps = 0;
