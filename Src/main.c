@@ -368,26 +368,8 @@ int enable_noise_rejection_step;
 int enable_sensitivity_fnc_step;
 float load_disturbance_sensitivity_scale;
 
-/* Noise rejection sensitivity function low pass filter */
-/* noise_rej_signal_filter, noise_rej_signal_prev, noise_rej_signal_filter_prev
-   → removed (write-only, never read) */
-float noise_rej_signal;
-
-/*
- * Real time user input system variables
- */
-
-float adjust_increment;
-
-/* Real time data reporting index */
-int report_mode;
-int speed_scale;
-int speed_governor;
-
-/* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → moved to ui.c (static) */
-/* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
-/* mode_transition_tick → never used, removed */
-int mode_transition_state;
+/* noise_rej_signal → local in control_execute_cycle */
+/* adjust_increment, report_mode, speed_scale, speed_governor, mode_transition_state → ctx fields */
 
 
 /* message_received → never referenced, removed */
@@ -400,11 +382,7 @@ tick_read_cycle, tick_read_cycle_start;
 
 float Tsample, Tsample_rotor;
 /* test_time → write-only (never read), removed */
-float angle_scale;
-int enable_high_speed_sampling;
-
-/* Reset state tracking */
-int reset_state;
+/* angle_scale, enable_high_speed_sampling, reset_state → ctx fields */
 
 /* Motor configuration */
 uint16_t min_speed, max_speed, max_accel, max_decel;
@@ -412,7 +390,7 @@ uint16_t min_speed, max_speed, max_accel, max_decel;
 int main(void) {
 	/* Initialize reset state indicating that reset has occurred */
 
-	reset_state = 1;
+	g_app.reset_state = 1;
 
 	/* Initialize and enable cycle counter */
 	ITM->LAR = 0xC5ACCE55; 	// at address 0xE0001FB0
@@ -431,7 +409,7 @@ int main(void) {
 	target_velocity_prescaled = 0;
 
 	/* Initialize default start mode and reporting mode */
-	report_mode = 1;
+	g_app.report_mode = 1;
 
 	app_bootstrap_system(&g_app, &gL6474InitParams);
 	app_run_mode_loop(&g_app);

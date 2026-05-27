@@ -84,6 +84,14 @@ typedef struct AppControlContext {
 	RotorPlantState plant;
 	PidGainSet gains;
 	ControllerDualPidRuntime core_dual_pid_runtime;
+	float angle_scale;
+	float adjust_increment;
+	int   enable_high_speed_sampling;
+	int   reset_state;
+	int   report_mode;
+	int   speed_scale;
+	int   speed_governor;
+	int   mode_transition_state;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;

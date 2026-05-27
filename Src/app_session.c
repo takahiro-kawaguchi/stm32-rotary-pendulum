@@ -74,7 +74,7 @@ void app_prepare_control_session(AppControlContext *ctx)
 		interactive_rotor_actuator_control();
 	}
 	if (enable_rotor_actuator_test == 1) {
-		rotor_encoder_test();
+		rotor_encoder_test(ctx);
 	}
 
 	app_assign_pid_gains_from_user(ctx);
@@ -116,7 +116,7 @@ void app_run_control_session(AppControlContext *ctx)
 
 	enable_control_action = ENABLE_CONTROL_ACTION;
 
-	if (reset_state == 1) {
+	if (ctx->reset_state == 1) {
 		hardware_rotor_home();
 	}
 	ret = hardware_rotor_position_read(&rotor_position_steps);
@@ -227,15 +227,15 @@ void app_run_control_session(AppControlContext *ctx)
 						encoder_position_init, &htim3);
 				if (fabs(
 						encoder_position_steps - encoder_position_down
-								- (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+								- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 					HAL_Delay(START_ANGLE_DELAY);
 					break;
 				}
 				if (fabs(
 						encoder_position_steps - encoder_position_down
-								+ (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+								+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 					encoder_position_down = encoder_position_down
-							- 2 * (int) (180 * angle_scale);
+							- 2 * (int) (180 * ctx->angle_scale);
 					HAL_Delay(START_ANGLE_DELAY);
 					break;
 				}
@@ -287,16 +287,16 @@ void app_run_control_session(AppControlContext *ctx)
 	chirp_dwell_cycle = 0;
 	pendulum_position_command_steps = 0;
 	impulse_start_index = 0;
-	mode_transition_state = 0;
+	ctx->mode_transition_state = 0;
 	adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
 	rotor_position_command_steps_pf_prev = 0;
-	enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
+	ctx->enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
 	rotor_track_comb_command = 0;
 	full_sysid_start_index = -1;
 	ctx->timing.current_cpu_cycle = 0;
-	speed_scale = DATA_REPORT_SPEED_SCALE;
-	speed_governor = 0;
+	ctx->speed_scale = DATA_REPORT_SPEED_SCALE;
+	ctx->speed_governor = 0;
 	encoder_position_offset = 0;
 	encoder_position_offset_zero = 0;
 
@@ -373,14 +373,14 @@ void app_run_control_session(AppControlContext *ctx)
 
 			if (fabs(
 					encoder_position_steps - encoder_position_down
-							- (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+							- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 				break;
 			}
 			if (fabs(
 					encoder_position_steps - encoder_position_down
-							+ (int) (180 * angle_scale)) < START_ANGLE * angle_scale) {
+							+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
 				encoder_position_down = encoder_position_down
-						- 2 * (int) (180 * angle_scale);
+						- 2 * (int) (180 * ctx->angle_scale);
 				break;
 			}
 
@@ -439,7 +439,7 @@ void app_run_control_session(AppControlContext *ctx)
 			&htim3);
 	if (select_suspended_mode == 0) {
 		encoder_position = encoder_position_steps - encoder_position_down
-				- (int) (180 * angle_scale);
+				- (int) (180 * ctx->angle_scale);
 		encoder_position = encoder_position - encoder_position_offset;
 	}
 

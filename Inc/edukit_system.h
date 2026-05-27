@@ -524,11 +524,7 @@ extern uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
        tick_read_cycle, tick_read_cycle_start;
 extern float Tsample, Tsample_rotor;
 /* test_time → write-only, removed */
-extern float angle_scale;
-extern int enable_high_speed_sampling;
-
-/* Reset state tracking */
-extern int reset_state;
+/* angle_scale, enable_high_speed_sampling, reset_state → ctx fields */
 
 /* Motor configuration */
 extern uint16_t min_speed, max_speed, max_accel, max_decel;
@@ -688,23 +684,12 @@ extern float load_disturbance_sensitivity_scale;
 
 /* Noise rejection sensitivity function low pass filter */
 
-/* noise_rej_signal_filter, _prev, _filter_prev → write-only, removed */
-extern float noise_rej_signal;
-
-/*
- * Real time user input system variables
- */
-
-extern float adjust_increment;
-/* Real time data reporting index */
-extern int report_mode;
-extern int speed_scale;
-extern int speed_governor;
-
+/* noise_rej_signal → local variable in control_execute_cycle */
+/* adjust_increment, report_mode, speed_scale, speed_governor → ctx fields */
+/* mode_transition_state → ctx field */
 /* mode_1..mode_19, mode_quit, mode_adaptive*, mode_string_* → ui.c (static) */
 /* mode_index_prev → write-only, removed; mode_index_command → ui.c static */
 /* mode_transition_tick → never used, removed */
-extern int mode_transition_state;
 
 
 /* message_received → never referenced, removed */

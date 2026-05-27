@@ -12,7 +12,7 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 {
 	encoder_position = 0;
 	encoder_position_down = 0;
-	angle_scale = ENCODER_READ_ANGLE_SCALE;
+	ctx->angle_scale = ENCODER_READ_ANGLE_SCALE;
 
 	rotor_control_target_steps = 0;
 	app_reset_command_shaper_state(ctx);
@@ -36,8 +36,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	enable_sensitivity_fnc_step = 0;
 	enable_pendulum_position_impulse_response_cycle = 0;
 
-	adjust_increment = 0.5;
-	mode_transition_state = 0;
+	ctx->adjust_increment = 0.5;
+	ctx->mode_transition_state = 0;
 
 	HAL_Init();
 	SystemClock_Config();

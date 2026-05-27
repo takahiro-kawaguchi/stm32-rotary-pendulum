@@ -9,7 +9,7 @@ void assign_mode_1(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend, arm
 void assign_mode_2(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
 void assign_mode_3(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend, arm_pid_instance_a_f32 *PID_Rotor);
 
-int  mode_index_identification(char *user_config_input, int config_command_control,
+int  mode_index_identification(AppControlContext *ctx, char *user_config_input, int config_command_control,
         float *adjust_increment, arm_pid_instance_a_f32 *PID_Pend,
         arm_pid_instance_a_f32 *PID_Rotor);
 
@@ -22,7 +22,7 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
         arm_pid_instance_a_f32 *PID_Pend,
         arm_pid_instance_a_f32 *PID_Rotor);
 
-void rotor_encoder_test(void);
+void rotor_encoder_test(AppControlContext *ctx);
 void motor_actuator_characterization_mode(AppControlContext *ctx);
 void interactive_rotor_actuator_control(void);
 

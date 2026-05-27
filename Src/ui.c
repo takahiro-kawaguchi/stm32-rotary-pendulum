@@ -171,7 +171,7 @@ static void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx 
 	}
 }
 
-int mode_index_identification(char * user_config_input, int config_command_control,
+int mode_index_identification(AppControlContext *ctx, char * user_config_input, int config_command_control,
 		float *adjust_increment, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
 
@@ -375,10 +375,10 @@ int mode_index_identification(char * user_config_input, int config_command_contr
 		else if (step_size == 4) { *adjust_increment = 100;}
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_high_speed_sampling ) == 0 ){
-		enable_high_speed_sampling = 1;
+		ctx->enable_high_speed_sampling = 1;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_high_speed_sampling ) == 0 ){
-		enable_high_speed_sampling = 0;
+		ctx->enable_high_speed_sampling = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_speed_prescale ) == 0 ){
 		/* enable_speed_prescale was write-only; keep config_command to acknowledge the command */
@@ -386,10 +386,10 @@ int mode_index_identification(char * user_config_input, int config_command_contr
 	} else if (strcmp(user_config_input, mode_string_disable_speed_prescale ) == 0 ){
 		config_command = 1;
 	} else if  (strcmp(user_config_input, mode_string_disable_speed_governor ) == 0 ){
-		speed_governor = 0;
+		ctx->speed_governor = 0;
 		config_command = 1;
 	} else if  (strcmp(user_config_input, mode_string_enable_speed_governor ) == 0 ){
-		speed_governor = 1;
+		ctx->speed_governor = 1;
 		config_command = 1;
 	} else {
 		mode_index_command = atoi((char*) Msg.Data);
@@ -563,9 +563,9 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 
 	if (readBytes == 2 && Msg.Len == 1 && cycle_index % 10 == 0) {
 		RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
-		mode_transition_state = 1;
-		mode_index_command = mode_index_identification((char *) Msg.Data, config_command,
-				&adjust_increment, PID_Pend, PID_Rotor);
+		ctx->mode_transition_state = 1;
+		mode_index_command = mode_index_identification(ctx, (char *) Msg.Data, config_command,
+				&ctx->adjust_increment, PID_Pend, PID_Rotor);
 		strcpy(config_message, (char *) Msg.Data);
 		if (strcmp(config_message, ">") == 0) {
 			if (enable_full_sysid && full_sysid_start_index == -1) {
@@ -578,21 +578,21 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 		}
 	}
 
-	if (mode_index_command == 1 && mode_transition_state == 1) {
+	if (mode_index_command == 1 && ctx->mode_transition_state == 1) {
 		mode_index = 1;
-		mode_transition_state = 0;
+		ctx->mode_transition_state = 0;
 		mode_index_command = 0;
 		assign_mode_1(ctx, PID_Pend, PID_Rotor);
 	}
-	if (mode_index_command == 2 && mode_transition_state == 1) {
+	if (mode_index_command == 2 && ctx->mode_transition_state == 1) {
 		mode_index = 2;
-		mode_transition_state = 0;
+		ctx->mode_transition_state = 0;
 		mode_index_command = 0;
 		assign_mode_2(ctx, PID_Pend, PID_Rotor);
 	}
-	if (mode_index_command == 3 && mode_transition_state == 1) {
+	if (mode_index_command == 3 && ctx->mode_transition_state == 1) {
 		mode_index = 3;
-		mode_transition_state = 0;
+		ctx->mode_transition_state = 0;
 		mode_index_command = 0;
 		assign_mode_3(ctx, PID_Pend, PID_Rotor);
 	}
@@ -2418,7 +2418,7 @@ void user_configuration(AppControlContext *ctx){
  * Rotor and encoder test mode
  */
 
-void rotor_encoder_test(void){
+void rotor_encoder_test(AppControlContext *ctx){
 	int j;
 	/*
 	 * Set Motor Speed Profile
@@ -2541,7 +2541,7 @@ void rotor_encoder_test(void){
 		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		encoder_position_down = encoder_position;
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees))\r\n\r\n",
-				(float) (encoder_position_down / angle_scale));
+				(float) (encoder_position_down / ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
 
@@ -2557,7 +2557,7 @@ void rotor_encoder_test(void){
 		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f\r\n(Correct value should lie between -359.5 and -360.5 degrees)\r\n\r\n",
 				(float) ((encoder_position_steps - encoder_position_down)
-						/ angle_scale));
+						/ ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
 
@@ -2573,7 +2573,7 @@ void rotor_encoder_test(void){
 		(void)hardware_encoder_position_read(&encoder_position_steps, encoder_position_init, &htim3);
 		sprintf(msg, "Encoder Angle is: %.2f \r\n(Correct value should lie between -0.5 and 0.5 degrees) \r\n\r\n",
 				(float) ((encoder_position_steps - encoder_position_down)
-						/ angle_scale));
+						/ ctx->angle_scale));
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
 				HAL_MAX_DELAY);
 
@@ -2641,7 +2641,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 			if (readBytes == 2 && Msg.Len == 1 && i % 10 == 0) {
 				RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes)
 								% UART_RX_BUFFER_SIZE;
-				mode_transition_state = 1;
+				ctx->mode_transition_state = 1;
 				if (strcmp((char *) Msg.Data, mode_string_stop) == 0) {
 					mode_index_command = mode_quit;
 				} else if (strcmp((char *) Msg.Data, mode_string_inc_accel)
@@ -2671,31 +2671,31 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				break;
 			}
 
-			if (mode_index_command == 1 && mode_transition_state == 1) {
+			if (mode_index_command == 1 && ctx->mode_transition_state == 1) {
 				mode_index = 1;
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 2 && mode_transition_state == 1) {
+			if (mode_index_command == 2 && ctx->mode_transition_state == 1) {
 				mode_index = 2;
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 3 && mode_transition_state == 1) {
+			if (mode_index_command == 3 && ctx->mode_transition_state == 1) {
 				L6474_SetAnalogValue(0, L6474_TVAL, MAX_TORQUE_CONFIG);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 4 && mode_transition_state == 1) {
+			if (mode_index_command == 4 && ctx->mode_transition_state == 1) {
 				L6474_SetAnalogValue(0, L6474_TVAL, MAX_TORQUE_CONFIG);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
-			if (mode_index_command == 5 && mode_transition_state == 1) {
+			if (mode_index_command == 5 && ctx->mode_transition_state == 1) {
 				L6474_SetAnalogValue(0, L6474_TVAL, MAX_TORQUE_CONFIG);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 6 && mode_transition_state == 1) {
+			if (mode_index_command == 6 && ctx->mode_transition_state == 1) {
 				rotor_test_speed_max = rotor_test_speed_max + 100;
 				if (rotor_test_speed_max > 1000) {
 					rotor_test_speed_max = 1000;
@@ -2703,10 +2703,10 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				BSP_MotorControl_SoftStop(0);
 				BSP_MotorControl_WaitWhileActive(0);
 				BSP_MotorControl_SetMaxSpeed(0, rotor_test_speed_max);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 7 && mode_transition_state == 1) {
+			if (mode_index_command == 7 && ctx->mode_transition_state == 1) {
 				rotor_test_speed_max = rotor_test_speed_max - 100;
 				if (rotor_test_speed_max < 200) {
 					rotor_test_speed_max = 200;
@@ -2717,10 +2717,10 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				BSP_MotorControl_SoftStop(0);
 				BSP_MotorControl_WaitWhileActive(0);
 				BSP_MotorControl_SetMaxSpeed(0, rotor_test_speed_max);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 8 && mode_transition_state == 1) {
+			if (mode_index_command == 8 && ctx->mode_transition_state == 1) {
 				rotor_test_speed_min = rotor_test_speed_min + 100;
 				if (rotor_test_speed_min > rotor_test_speed_max) {
 					rotor_test_speed_min = rotor_test_speed_max;
@@ -2731,10 +2731,10 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				BSP_MotorControl_SoftStop(0);
 				BSP_MotorControl_WaitWhileActive(0);
 				BSP_MotorControl_SetMinSpeed(0, rotor_test_speed_min);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 9 && mode_transition_state == 1) {
+			if (mode_index_command == 9 && ctx->mode_transition_state == 1) {
 				rotor_test_speed_min = rotor_test_speed_min - 100;
 				if (rotor_test_speed_min < 200) {
 					rotor_test_speed_min = 200;
@@ -2742,10 +2742,10 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 				BSP_MotorControl_SoftStop(0);
 				BSP_MotorControl_WaitWhileActive(0);
 				BSP_MotorControl_SetMinSpeed(0, rotor_test_speed_min);
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 16 && mode_transition_state == 1) {
+			if (mode_index_command == 16 && ctx->mode_transition_state == 1) {
 				rotor_test_acceleration_max = rotor_test_acceleration_max - 500;
 				if (rotor_test_acceleration_max < 0) {
 					rotor_test_acceleration_max = 0;
@@ -2757,10 +2757,10 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 						(uint16_t) (rotor_test_acceleration_max));
 				BSP_MotorControl_SetDeceleration(0,
 						(uint16_t) (swing_deceleration_max));
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 17 && mode_transition_state == 1) {
+			if (mode_index_command == 17 && ctx->mode_transition_state == 1) {
 				rotor_test_acceleration_max = rotor_test_acceleration_max + 500;
 				if (rotor_test_acceleration_max > 10000) {
 					rotor_test_acceleration_max = 10000;
@@ -2772,23 +2772,23 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 						(uint16_t) (rotor_test_acceleration_max));
 				BSP_MotorControl_SetDeceleration(0,
 						(uint16_t) (swing_deceleration_max));
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 18 && mode_transition_state == 1) {
+			if (mode_index_command == 18 && ctx->mode_transition_state == 1) {
 				rotor_chirp_amplitude = rotor_chirp_amplitude + 1;
 				if (rotor_chirp_amplitude > 10) {
 					rotor_chirp_amplitude = 10;
 				}
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
-			if (mode_index_command == 19 && mode_transition_state == 1) {
+			if (mode_index_command == 19 && ctx->mode_transition_state == 1) {
 				rotor_chirp_amplitude = rotor_chirp_amplitude - 1;
 				if (rotor_chirp_amplitude < 1) {
 					rotor_chirp_amplitude = 1;
 				}
-				mode_transition_state = 0;
+				ctx->mode_transition_state = 0;
 			}
 
 			if (i == 0) {
