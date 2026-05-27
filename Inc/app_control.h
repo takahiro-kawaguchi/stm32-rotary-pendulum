@@ -1,4 +1,4 @@
-#ifndef APP_CONTROL_H
+﻿#ifndef APP_CONTROL_H
 #define APP_CONTROL_H
 
 #include "hardware.h"
@@ -59,8 +59,8 @@ typedef struct {
 	uint32_t tick_cycle_start;
 	uint32_t tick_read_cycle;
 	uint32_t tick_read_cycle_start;
-	float Tsample;
-	float Tsample_rotor;
+	float t_sample_s;
+	float t_sample_rotor_s;
 } LoopTimingState;
 
 typedef struct {

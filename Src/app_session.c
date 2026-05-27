@@ -1,4 +1,4 @@
-#include "main.h"
+﻿#include "main.h"
 #include "edukit_system.h"
 #include "hardware.h"
 #include "app_control.h"
@@ -26,14 +26,14 @@ void app_run_mode_loop(AppControlContext *ctx)
 		user_prompt();
 
 		if (ui_get_mode_interactive() == 0) {
-			sprintf(msg,
+			sprintf(uart_tx_buf,
 					"\n\rEnter Mode Selection Now or System Will Start in Default Mode in 5 Seconds..: ");
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		}
 
 		if (ui_get_mode_interactive() == 1) {
-			sprintf(msg, "\n\rEnter Mode Selection Now: \n\r");
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			sprintf(uart_tx_buf, "\n\rEnter Mode Selection Now: \n\r");
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		}
 
 		for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
@@ -58,21 +58,21 @@ void app_prepare_control_session(AppControlContext *ctx)
 	BSP_MotorControl_SetDeceleration(0, MAX_DECEL);
 
 	if (ACCEL_CONTROL == 0) {
-		sprintf(msg, "\n\rMotor Profile Speeds Set at Min %u Max %u Steps per Second",
+		sprintf(uart_tx_buf, "\n\rMotor Profile Speeds Set at Min %u Max %u Steps per Second",
 				ctx->min_speed, ctx->max_speed);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->select_suspended_mode == 0) {
-		sprintf(msg, "\n\rInverted Pendulum Mode Selected");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "\n\rInverted Pendulum Mode Selected");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->select_suspended_mode == 1) {
-		sprintf(msg, "\n\rSuspended Pendulum Mode Selected");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "\n\rSuspended Pendulum Mode Selected");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
-	sprintf(msg, "\n\rMotor Torque Current Set at %0.1f mA", ctx->torq_current_val);
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "\n\rMotor Torque Current Set at %0.1f mA", ctx->torq_current_val);
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	if (ctx->enable_motor_actuator_characterization_mode == 1) {
 		motor_actuator_characterization_mode(ctx);
@@ -90,23 +90,23 @@ void app_prepare_control_session(AppControlContext *ctx)
 	if (ctx->plant.rotor_damping_coefficient != 0 || ctx->plant.rotor_natural_frequency != 0) {
 		ctx->plant.Wn2 = ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency;
 		ctx->plant.rotor_plant_gain = ctx->plant.rotor_plant_gain * ctx->plant.Wn2;
-		ctx->plant.ao = ((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)
-				+ (2.0F / ctx->timing.Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+		ctx->plant.ao = ((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)
+				+ (2.0F / ctx->timing.t_sample_s) * 2.0F * ctx->plant.rotor_damping_coefficient
 						* ctx->plant.rotor_natural_frequency
 				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency);
-		ctx->plant.c0 = ((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample) / ctx->plant.ao);
+		ctx->plant.c0 = ((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s) / ctx->plant.ao);
 		ctx->plant.c1 = -2.0F * ctx->plant.c0;
 		ctx->plant.c2 = ctx->plant.c0;
 		ctx->plant.c3 = -(2.0F * ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency
-				- 2.0F * (2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)) / ctx->plant.ao;
-		ctx->plant.c4 = -((2.0F / ctx->timing.Tsample) * (2.0F / ctx->timing.Tsample)
-				- (2.0F / ctx->timing.Tsample) * 2.0F * ctx->plant.rotor_damping_coefficient
+				- 2.0F * (2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)) / ctx->plant.ao;
+		ctx->plant.c4 = -((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)
+				- (2.0F / ctx->timing.t_sample_s) * 2.0F * ctx->plant.rotor_damping_coefficient
 						* ctx->plant.rotor_natural_frequency
 				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency) / ctx->plant.ao;
 	}
 
 	if (ctx->plant.enable_rotor_plant_design == 2) {
-		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * ctx->timing.Tsample);
+		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * ctx->timing.t_sample_s);
 		ctx->plant.iir_0_r = 1 - (1 / (1 + ctx->plant.IWon_r));
 		ctx->plant.iir_1_r = -ctx->plant.iir_0_r;
 		ctx->plant.iir_2_r = (1 / (1 + ctx->plant.IWon_r)) * (1 - ctx->plant.IWon_r);
@@ -135,9 +135,9 @@ static void app_session_home_rotor(AppControlContext *ctx)
 		hardware_rotor_home();
 	}
 	ret = hardware_rotor_position_read(&ctx->rotor_pos.rotor_position_steps);
-	sprintf(msg, "\r\nPrepare for Control Start - Initial Rotor Position: %i\r\n",
+	sprintf(uart_tx_buf, "\r\nPrepare for Control Start - Initial Rotor Position: %i\r\n",
 			ctx->rotor_pos.rotor_position_steps);
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	BSP_MotorControl_GoTo(0, 3);
 	BSP_MotorControl_WaitWhileActive(0);
@@ -158,8 +158,8 @@ static void app_session_wait_pendulum_rest(AppControlContext *ctx)
 	int ret;
 	int encoder_position_curr, encoder_position_prev;
 
-	sprintf(msg, "Test for Pendulum at Rest - Waiting for Pendulum to Stabilize\r\n");
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Test for Pendulum at Rest - Waiting for Pendulum to Stabilize\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	ctx->enc_cal.encoder_position_init = 0;
 	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
@@ -191,15 +191,15 @@ static void app_session_wait_pendulum_rest(AppControlContext *ctx)
 				break;
 			}
 		}
-		sprintf(msg,
+		sprintf(uart_tx_buf,
 				"Pendulum Motion Detected with angle %0.2f - Waiting for Pendulum to Stabilize\r\n",
 				(float) ((encoder_position_curr - encoder_position_prev)
 						/ ENCODER_READ_ANGLE_SCALE));
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
-	sprintf(msg, "Pendulum Now at Rest and Measuring Pendulum Down Angle\r\n");
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Pendulum Now at Rest and Measuring Pendulum Down Angle\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	HAL_Delay(100);
 	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
@@ -207,19 +207,19 @@ static void app_session_wait_pendulum_rest(AppControlContext *ctx)
 	ctx->enc_cal.encoder_position_init = ctx->enc_cal.encoder_position_steps;
 
 	if (ret == -1) {
-		sprintf(msg, "Encoder Position Under Range Error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "Encoder Position Under Range Error\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ret == 1) {
-		sprintf(msg, "Encoder Position Over Range Error\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "Encoder Position Over Range Error\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps, ctx->enc_cal.encoder_position_init,
 			&htim3);
 	ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_steps;
-	sprintf(msg, "Pendulum Initial Angle %i\r\n", ctx->enc_cal.encoder_position_steps);
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Pendulum Initial Angle %i\r\n", ctx->enc_cal.encoder_position_steps);
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	(void)ret;
 }
 
@@ -241,9 +241,9 @@ static void app_session_wait_pendulum_upright(AppControlContext *ctx)
 		BSP_MotorControl_WaitWhileActive(0);
 
 		if (ctx->select_suspended_mode == 0) {
-			sprintf(msg,
+			sprintf(uart_tx_buf,
 					"Adjust Pendulum Upright By Turning CCW Control Will Start When Vertical\r\n");
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		}
 	}
 
@@ -271,9 +271,9 @@ static void app_session_wait_pendulum_upright(AppControlContext *ctx)
 
 				if ((tick_wait - tick_wait_start)
 						> PENDULUM_ORIENTATION_START_DELAY) {
-					sprintf(msg,
+					sprintf(uart_tx_buf,
 							"Pendulum Upright Action Not Detected - Restarting ...\r\n");
-					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg),
+					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf),
 							HAL_MAX_DELAY);
 					ctx->enable_control_action = 0;
 					break;
@@ -283,9 +283,9 @@ static void app_session_wait_pendulum_upright(AppControlContext *ctx)
 	}
 
 	if (ctx->select_suspended_mode == 1) {
-		sprintf(msg, "Suspended Mode Control Will Start in %i Seconds\r\n",
+		sprintf(uart_tx_buf, "Suspended Mode Control Will Start in %i Seconds\r\n",
 				(int) (CONTROL_START_DELAY / 1000));
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	(void)ret;
 }
@@ -393,8 +393,8 @@ static void app_run_swing_up(AppControlContext *ctx)
 	ctx->torq_current_val = MAX_TORQUE_SWING_UP;
 	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);
 
-	sprintf(msg, "Pendulum Swing Up Starting\r\n");
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Pendulum Swing Up Starting\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	hardware_swing_up_reset();
 	swing_up_state = 0;
@@ -490,7 +490,7 @@ static void app_run_balance_loop(AppControlContext *ctx)
 		ctx->enc_cal.encoder_position = ctx->enc_cal.encoder_position - ctx->enc_cal.encoder_position_offset;
 	}
 
-	app_init_control_pipeline(ctx, ctx->enc_cal.encoder_position_init, ctx->timing.Tsample);
+	app_init_control_pipeline(ctx, ctx->enc_cal.encoder_position_init, ctx->timing.t_sample_s);
 
 	while (ctx->enable_control_action == 1) {
 		ret = control_handle_runtime_configuration(ctx, i);

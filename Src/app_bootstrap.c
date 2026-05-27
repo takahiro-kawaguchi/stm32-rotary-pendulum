@@ -1,4 +1,4 @@
-#include "main.h"
+﻿#include "main.h"
 #include "edukit_system.h"
 #include "app_control.h"
 #include "app_bootstrap.h"
@@ -115,8 +115,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	}
 
 	ctx->timing.t_sample_cpu_cycles = (uint32_t) round(T_SAMPLE_DEFAULT * RCC_HCLK_FREQ);
-	ctx->timing.Tsample = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
-	ctx->timing.Tsample_rotor = ctx->timing.Tsample;
+	ctx->timing.t_sample_s = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
+	ctx->timing.t_sample_rotor_s = ctx->timing.t_sample_s;
 	assert(RCC_SYS_CLOCK_FREQ == HAL_RCC_GetSysClockFreq());
 	assert(RCC_HCLK_FREQ == HAL_RCC_GetHCLKFreq());
 
@@ -125,19 +125,19 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 		float fo, Wo, IWon;
 		fo = LP_CORNER_FREQ_ROTOR;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * ctx->timing.Tsample);
+		IWon = 2 / (Wo * ctx->timing.t_sample_s);
 		ctx->lpf.iir_0 = 1 / (1 + IWon);
 		ctx->lpf.iir_1 = ctx->lpf.iir_0;
 		ctx->lpf.iir_2 = ctx->lpf.iir_0 * (1 - IWon);
 		fo = LP_CORNER_FREQ_STEP;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * ctx->timing.Tsample);
+		IWon = 2 / (Wo * ctx->timing.t_sample_s);
 		ctx->lpf.iir_0_s = 1 / (1 + IWon);
 		ctx->lpf.iir_1_s = ctx->lpf.iir_0_s;
 		ctx->lpf.iir_2_s = ctx->lpf.iir_0_s * (1 - IWon);
 		fo = LP_CORNER_FREQ_LONG_TERM;
 		Wo = 2 * 3.141592654 * fo;
-		IWon = 2 / (Wo * ctx->timing.Tsample);
+		IWon = 2 / (Wo * ctx->timing.t_sample_s);
 		ctx->lpf.iir_LT_0 = 1 / (1 + IWon);
 		ctx->lpf.iir_LT_1 = ctx->lpf.iir_LT_0;
 		ctx->lpf.iir_LT_2 = ctx->lpf.iir_LT_0 * (1 - IWon);

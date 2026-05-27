@@ -1,4 +1,4 @@
-#include "main.h"
+﻿#include "main.h"
 #include "edukit_system.h"
 #include "hardware.h"
 #include "ui.h"
@@ -76,9 +76,9 @@ void control_shutdown_sequence(AppControlContext *ctx)
 
 	hardware_sensor_read(&ctx->core_hw_raw, NULL);
 	ctx->rotor_pos.rotor_position_steps = ctx->core_hw_raw.rotor_steps;
-	sprintf(msg, "Exit Control at Rotor Angle, %.2f\r\n",
+	sprintf(uart_tx_buf, "Exit Control at Rotor Angle, %.2f\r\n",
 			(float) ((ctx->rotor_pos.rotor_position_steps) / STEPPER_READ_POSITION_STEPS_PER_DEGREE));
-	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 	NVIC_SystemReset();
 }
@@ -132,9 +132,9 @@ int control_update_state_and_safety(AppControlContext *ctx)
 	if (ctx->select_suspended_mode == 0) {
 		if ((ctx->enc_cal.encoder_position / ENCODER_READ_ANGLE_SCALE) > ENCODER_POSITION_POSITIVE_LIMIT
 				|| (ctx->enc_cal.encoder_position / ENCODER_READ_ANGLE_SCALE) < ENCODER_POSITION_NEGATIVE_LIMIT) {
-			sprintf(msg, "Error Exit Encoder Position Exceeded: %i\r\n",
+			sprintf(uart_tx_buf, "Error Exit Encoder Position Exceeded: %i\r\n",
 					ctx->enc_cal.encoder_position_steps);
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 			return 1;
 		}
 	}
@@ -143,8 +143,8 @@ int control_update_state_and_safety(AppControlContext *ctx)
 			* STEPPER_READ_POSITION_STEPS_PER_DEGREE)
 			|| ctx->rotor_pos.rotor_position_steps < (ROTOR_POSITION_NEGATIVE_LIMIT
 					* STEPPER_READ_POSITION_STEPS_PER_DEGREE)) {
-		sprintf(msg, "Error Exit Motor Position Exceeded: %i\r\n", ctx->rotor_pos.rotor_position_steps);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "Error Exit Motor Position Exceeded: %i\r\n", ctx->rotor_pos.rotor_position_steps);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		return 1;
 	}
 
@@ -184,7 +184,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 	input.feedforward_gain = ctx->gains.feedforward_gain;
 	input.integral_compensator_gain = ctx->gains.integral_compensator_gain;
 	input.load_disturbance_sensitivity_scale = ctx->gains.load_disturbance_sensitivity_scale;
-	input.sample_period_rotor_s = ctx->timing.Tsample_rotor;
+	input.sample_period_rotor_s = ctx->timing.t_sample_rotor_s;
 	input.enable_state_feedback = ctx->gains.enable_state_feedback;
 	input.enable_disturbance_rejection_step = ctx->gains.enable_disturbance_rejection_step;
 	input.enable_sensitivity_fnc_step = ctx->gains.enable_sensitivity_fnc_step;
@@ -207,7 +207,7 @@ void control_update_dual_pid(AppControlContext *ctx)
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 {
 	CommandShaperConfig shaper_cfg;
-	shaper_cfg.sample_period_s = ctx->timing.Tsample;
+	shaper_cfg.sample_period_s = ctx->timing.t_sample_s;
 	shaper_cfg.accel_control = ACCEL_CONTROL;
 	shaper_cfg.angle_cal_complete = ctx->enc_cal.angle_cal_complete;
 	shaper_cfg.full_sysid_start_index = ctx->tracking.full_sysid_start_index;
@@ -251,8 +251,8 @@ int control_wait_next_cycle(AppControlContext *ctx)
 		DWT_Delay_until_cycle(ctx->timing.target_cpu_cycle);
 	} else if (ctx->timing.current_cpu_cycle - ctx->timing.target_cpu_cycle > ctx->timing.t_sample_cpu_cycles * 5
 			&& ctx->timing.enable_cycle_delay_warning == 1) {
-		sprintf(msg, "Error: control loop lag\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		sprintf(uart_tx_buf, "Error: control loop lag\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		return 1;
 	}
 

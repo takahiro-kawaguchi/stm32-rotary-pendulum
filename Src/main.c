@@ -1,4 +1,4 @@
-
+﻿
 /*
  ******************************************************************************
  * @file    Multi/Examples/MotionControl/IHM01A1_ExampleFor1Motor/Src/main.c
@@ -252,7 +252,7 @@ static AppControlContext g_app = {
 
 /* System timing variables */
 /* tick, tick_cycle_current/previous/start, tick_read_cycle/_start → ctx->timing fields */
-/* Tsample, Tsample_rotor → ctx->timing fields */
+/* t_sample_s, t_sample_rotor_s → ctx->timing fields */
 
 /* Motor configuration */
 /* min_speed, max_speed, max_accel, max_decel → ctx fields */

@@ -1,4 +1,4 @@
-#include "main.h"
+﻿#include "main.h"
 #include "edukit_system.h"
 #include "app_control.h"
 #include "app_runtime.h"
@@ -442,7 +442,7 @@ static void report_data(AppControlContext *ctx, int i)
 
 	if (i == 1) {
 		ctx->timing.cycle_period_start = HAL_GetTick();
-		ctx->timing.cycle_period_sum = 100 * ctx->timing.Tsample * 1000 - 1;
+		ctx->timing.cycle_period_sum = 100 * ctx->timing.t_sample_s * 1000 - 1;
 	}
 	if (i % 100 == 0) {
 		ctx->timing.cycle_period_sum = HAL_GetTick() - ctx->timing.cycle_period_start;
@@ -475,27 +475,27 @@ static void report_data_high_speed(AppControlContext *ctx, int i)
 
 	if (ctx->tracking.enable_rotor_chirp == 1
 			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(ctx->enc_cal.encoder_position)), display_parameter,
 				(int) (roundf(ctx->rotor_pos.rotor_control_target_steps)),
 				(int) (ctx->rotor_pos.reference_tracking_command));
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->tracking.enable_rotor_chirp == 0
 			&& ctx->tracking.enable_rotor_tracking_comb_signal == 1 && ACCEL_CONTROL_DATA == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.current_cpu_cycle_delay_relative_report,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.current_cpu_cycle_delay_relative_report,
 				(int) (roundf(ctx->enc_cal.encoder_position)), display_parameter,
 				(int) (roundf(ctx->rotor_pos.rotor_control_target_steps)),
 				(int) (roundf(100 * ctx->rotor_pos.rotor_position_command_steps)));
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->tracking.enable_rotor_chirp == 0
 			&& ctx->tracking.enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(ctx->enc_cal.encoder_position)), display_parameter,
 				(int) (roundf(ctx->rotor_pos.rotor_control_target_steps)),
 				(int) (ctx->rotor_pos.reference_tracking_command));
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->tracking.enable_rotor_chirp == 0 && ACCEL_CONTROL_DATA == 1) {
 		if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1) {
@@ -503,17 +503,17 @@ static void report_data_high_speed(AppControlContext *ctx, int i)
 		} else {
 			ctx->rotor_pos.reference_tracking_command = ctx->rotor_pos.rotor_position_command_steps;
 		}
-		if (ctx->timing.Tsample <= 0.00125) {
-			sprintf(msg, "%i\t%lu\r\n", (int) ctx->rotor_pos.reference_tracking_command,
+		if (ctx->timing.t_sample_s <= 0.00125) {
+			sprintf(uart_tx_buf, "%i\t%lu\r\n", (int) ctx->rotor_pos.reference_tracking_command,
 					current_pwm_period);
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		} else {
-			sprintf(msg, "%i\t%i\t%i\t%lu\t%lu\t%lu\r\n",
+			sprintf(uart_tx_buf, "%i\t%i\t%i\t%lu\t%lu\t%lu\r\n",
 					(int) ctx->rotor_pos.reference_tracking_command,
 					(int) (roundf(ctx->rotor_pos.rotor_control_target_steps / 10)),
 					(int) (ctx->rotor_pos.rotor_position_command_steps), current_pwm_period,
 					desired_pwm_period / 10000, (clock_int_time / 100000));
-			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		}
 	}
 }
@@ -525,42 +525,42 @@ static void report_data_low_speed(AppControlContext *ctx, int i)
 	}
 
 	if (ctx->report_mode != 1000 && ctx->report_mode != 2000 && ctx->speed_governor == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
 				ctx->timing.cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
 				(int) (roundf(ctx->enc_cal.encoder_position)), display_parameter,
 				(int) (ctx->core_ctl_state.PID_Pend.int_term) / 100,
 				ctx->rotor_pos.reference_tracking_command,
 				(int) (roundf(ctx->rotor_pos.rotor_control_target_steps)),
 				(int) (ctx->core_ctl_state.PID_Rotor.control_output) / 100);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->report_mode != 1000 && ctx->report_mode != 2000 && (i % ctx->speed_scale) == 0
 			&& ctx->speed_governor == 1) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
 				ctx->timing.cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
 				(int) (roundf(ctx->enc_cal.encoder_position)), display_parameter,
 				(int) (ctx->core_ctl_state.PID_Pend.int_term) / 100,
 				ctx->rotor_pos.reference_tracking_command,
 				(int) (roundf(ctx->rotor_pos.rotor_control_target_steps)),
 				(int) (ctx->core_ctl_state.PID_Rotor.control_output) / 100);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->report_mode == 1000) {
-		sprintf(msg, "%i\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%i\t%i\r\n",
+		sprintf(uart_tx_buf, "%i\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%i\t%i\r\n",
 				(int) 0, ctx->core_ctl_state.PID_Pend.Kp,
 				ctx->core_ctl_state.PID_Pend.Ki, ctx->core_ctl_state.PID_Pend.Kd,
 				ctx->core_ctl_state.PID_Rotor.Kp, ctx->core_ctl_state.PID_Rotor.Ki,
 				ctx->core_ctl_state.PID_Rotor.Kd, ctx->max_speed / 10, ctx->min_speed / 10);
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	if (ctx->report_mode == 2000) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\r\n", (int) 1,
+		sprintf(uart_tx_buf, "%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\t%i\r\n", (int) 1,
 				(int) ctx->torq_current_val, ctx->max_accel, ctx->max_decel,
 				ctx->gains.enable_disturbance_rejection_step, ctx->gains.enable_noise_rejection_step,
 				ctx->tracking.enable_rotor_position_step_response_cycle, (int) (ctx->adjust_increment * 10),
 				ctx->gains.enable_sensitivity_fnc_step);
 		ctx->report_mode = 0;
-		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 	ctx->report_mode = ctx->report_mode + 1;
 }

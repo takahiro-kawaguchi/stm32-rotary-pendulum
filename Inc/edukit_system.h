@@ -1,4 +1,4 @@
-
+﻿
 
 
 
@@ -522,7 +522,7 @@ extern char uart_tx_buf[192];
 
 /* tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
    tick_read_cycle, tick_read_cycle_start → ctx->timing fields */
-/* Tsample, Tsample_rotor → ctx->timing fields */
+/* t_sample_s, t_sample_rotor_s → ctx->timing fields */
 /* test_time → write-only, removed */
 /* angle_scale, enable_high_speed_sampling, reset_state → ctx fields */
 
