@@ -409,59 +409,59 @@ int mode_index_identification(char * user_config_input, int config_command_contr
 	return mode_index_command;
 }
 
-void assign_mode_1(arm_pid_instance_a_f32 *PID_Pend,
+void assign_mode_1(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
 	select_suspended_mode = 0;
-	proportional = PRIMARY_PROPORTIONAL_MODE_1;
-	integral = PRIMARY_INTEGRAL_MODE_1;
-	derivative = PRIMARY_DERIVATIVE_MODE_1;
-	rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_1;
-	rotor_i_gain = SECONDARY_INTEGRAL_MODE_1;
-	rotor_d_gain = SECONDARY_DERIVATIVE_MODE_1;
-	PID_Pend->Kp = proportional;
-	PID_Pend->Ki = integral;
-	PID_Pend->Kd = derivative;
-	PID_Rotor->Kp = rotor_p_gain;
-	PID_Rotor->Ki = rotor_i_gain;
-	PID_Rotor->Kd = rotor_d_gain;
+	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_1;
+	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_1;
+	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_1;
+	ctx->gains.rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_1;
+	ctx->gains.rotor_i_gain = SECONDARY_INTEGRAL_MODE_1;
+	ctx->gains.rotor_d_gain = SECONDARY_DERIVATIVE_MODE_1;
+	PID_Pend->Kp = ctx->gains.proportional;
+	PID_Pend->Ki = ctx->gains.integral;
+	PID_Pend->Kd = ctx->gains.derivative;
+	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
+	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
+	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
 	torq_current_val = MAX_TORQUE_CONFIG;
 	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
 }
 
-void assign_mode_2(arm_pid_instance_a_f32 *PID_Pend,
+void assign_mode_2(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
 	select_suspended_mode = 0;
-	proportional = PRIMARY_PROPORTIONAL_MODE_2;
-	integral = PRIMARY_INTEGRAL_MODE_2;
-	derivative = PRIMARY_DERIVATIVE_MODE_2;
-	rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_2;
-	rotor_i_gain = SECONDARY_INTEGRAL_MODE_2;
-	rotor_d_gain = SECONDARY_DERIVATIVE_MODE_2;
-	PID_Pend->Kp = proportional;
-	PID_Pend->Ki = integral;
-	PID_Pend->Kd = derivative;
-	PID_Rotor->Kp = rotor_p_gain;
-	PID_Rotor->Ki = rotor_i_gain;
-	PID_Rotor->Kd = rotor_d_gain;
+	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_2;
+	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_2;
+	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_2;
+	ctx->gains.rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_2;
+	ctx->gains.rotor_i_gain = SECONDARY_INTEGRAL_MODE_2;
+	ctx->gains.rotor_d_gain = SECONDARY_DERIVATIVE_MODE_2;
+	PID_Pend->Kp = ctx->gains.proportional;
+	PID_Pend->Ki = ctx->gains.integral;
+	PID_Pend->Kd = ctx->gains.derivative;
+	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
+	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
+	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
 	torq_current_val = MAX_TORQUE_CONFIG;
 	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
 }
 
-void assign_mode_3(arm_pid_instance_a_f32 *PID_Pend,
+void assign_mode_3(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor){
 	select_suspended_mode = 0;
-	proportional = PRIMARY_PROPORTIONAL_MODE_3;
-	integral = PRIMARY_INTEGRAL_MODE_3;
-	derivative = PRIMARY_DERIVATIVE_MODE_3;
-	rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_3;
-	rotor_i_gain = SECONDARY_INTEGRAL_MODE_3;
-	rotor_d_gain = SECONDARY_DERIVATIVE_MODE_3;
-	PID_Pend->Kp = proportional;
-	PID_Pend->Ki = integral;
-	PID_Pend->Kd = derivative;
-	PID_Rotor->Kp = rotor_p_gain;
-	PID_Rotor->Ki = rotor_i_gain;
-	PID_Rotor->Kd = rotor_d_gain;
+	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_3;
+	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_3;
+	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_3;
+	ctx->gains.rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_3;
+	ctx->gains.rotor_i_gain = SECONDARY_INTEGRAL_MODE_3;
+	ctx->gains.rotor_d_gain = SECONDARY_DERIVATIVE_MODE_3;
+	PID_Pend->Kp = ctx->gains.proportional;
+	PID_Pend->Ki = ctx->gains.integral;
+	PID_Pend->Kd = ctx->gains.derivative;
+	PID_Rotor->Kp = ctx->gains.rotor_p_gain;
+	PID_Rotor->Ki = ctx->gains.rotor_i_gain;
+	PID_Rotor->Kd = ctx->gains.rotor_d_gain;
 	torq_current_val = MAX_TORQUE_CONFIG;
 	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
 }
@@ -582,19 +582,19 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 		mode_index = 1;
 		mode_transition_state = 0;
 		mode_index_command = 0;
-		assign_mode_1(PID_Pend, PID_Rotor);
+		assign_mode_1(ctx, PID_Pend, PID_Rotor);
 	}
 	if (mode_index_command == 2 && mode_transition_state == 1) {
 		mode_index = 2;
 		mode_transition_state = 0;
 		mode_index_command = 0;
-		assign_mode_2(PID_Pend, PID_Rotor);
+		assign_mode_2(ctx, PID_Pend, PID_Rotor);
 	}
 	if (mode_index_command == 3 && mode_transition_state == 1) {
 		mode_index = 3;
 		mode_transition_state = 0;
 		mode_index_command = 0;
-		assign_mode_3(PID_Pend, PID_Rotor);
+		assign_mode_3(ctx, PID_Pend, PID_Rotor);
 	}
 
 	return 0;
@@ -745,14 +745,14 @@ void user_configuration(AppControlContext *ctx){
 		if (((tick_read_cycle - tick_read_cycle_start) > START_DEFAULT_MODE_TIME) && (mode_interactive == 0)) {
 			sprintf(msg, "\n\rNo Entry Detected - Now Selecting Default Inverted Pendulum Mode 1......: \n\r");
 			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-			enable_state_feedback = 0;
+			ctx->gains.enable_state_feedback = 0;
 			select_suspended_mode = 0;
-			proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
-			integral = 			PRIMARY_INTEGRAL_MODE_1;
-			derivative = 		PRIMARY_DERIVATIVE_MODE_1;
-			rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
-			rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
-			rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
+			ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
+			ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
+			ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
+			ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
+			ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
+			ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 			max_speed = 		MAX_SPEED_MODE_1;
 			min_speed = 		MIN_SPEED_MODE_1;
 			ctx->plant.enable_rotor_plant_design = 0;
@@ -806,14 +806,14 @@ void user_configuration(AppControlContext *ctx){
 				/* Flush read buffer  */
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 				select_suspended_mode = 0;
-				proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
-				integral = 			PRIMARY_INTEGRAL_MODE_1;
-				derivative = 		PRIMARY_DERIVATIVE_MODE_1;
-				rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
-				rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
-				rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
+				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
+				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
+				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
+				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
+				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
+				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 				max_speed = 		MAX_SPEED_MODE_1;
 				min_speed = 		MIN_SPEED_MODE_1;
 				ctx->plant.enable_rotor_plant_design = 0;
@@ -950,14 +950,14 @@ void user_configuration(AppControlContext *ctx){
 				/* Flush read buffer  */
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 				select_suspended_mode = 0;
-				proportional = 		PRIMARY_PROPORTIONAL_MODE_2;
-				integral = 			PRIMARY_INTEGRAL_MODE_2;
-				derivative = 		PRIMARY_DERIVATIVE_MODE_2;
-				rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_2;
-				rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_2;
-				rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_2;
+				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_2;
+				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_2;
+				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_2;
+				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_2;
+				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_2;
+				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_2;
 				max_speed = 		MAX_SPEED_MODE_2;
 				min_speed = 		MIN_SPEED_MODE_2;
 				ctx->plant.enable_rotor_plant_design = 0;
@@ -1074,14 +1074,14 @@ void user_configuration(AppControlContext *ctx){
 				/* Flush read buffer  */
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 				select_suspended_mode = 0;
-				proportional = 		PRIMARY_PROPORTIONAL_MODE_3;
-				integral = 			PRIMARY_INTEGRAL_MODE_3;
-				derivative = 		PRIMARY_DERIVATIVE_MODE_3;
-				rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_3;
-				rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_3;
-				rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_3;
+				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_3;
+				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_3;
+				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_3;
+				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_3;
+				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_3;
+				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_3;
 				max_speed = 		MAX_SPEED_MODE_3;
 				min_speed = 		MIN_SPEED_MODE_3;
 				ctx->plant.enable_rotor_plant_design = 0;
@@ -1206,14 +1206,14 @@ void user_configuration(AppControlContext *ctx){
 				/* Flush read buffer  */
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 				select_suspended_mode = 1;
-				proportional = 		PRIMARY_PROPORTIONAL_MODE_4;
-				integral = 			PRIMARY_INTEGRAL_MODE_4;
-				derivative = 		PRIMARY_DERIVATIVE_MODE_4;
-				rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_4;
-				rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_4;
-				rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_4;
+				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_4;
+				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_4;
+				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_4;
+				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_4;
+				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_4;
+				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_4;
 				max_speed = 		MAX_SPEED_MODE_1;
 				min_speed = 		MIN_SPEED_MODE_1;
 				ctx->plant.enable_rotor_plant_design = 0;
@@ -1341,33 +1341,33 @@ void user_configuration(AppControlContext *ctx){
 
 				sprintf(msg, "\n\rEnter 0 for Dual PID - Enter 1 for State Feedback.........................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &enable_state_feedback);
-				sprintf(msg, "%i", enable_state_feedback);
+				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.enable_state_feedback);
+				sprintf(msg, "%i", ctx->gains.enable_state_feedback);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if ( enable_state_feedback < 0 ){
+				if ( ctx->gains.enable_state_feedback < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
 					NVIC_SystemReset();
 				}
 
-				if (enable_state_feedback == 1){
+				if (ctx->gains.enable_state_feedback == 1){
 
 					/*
-					 * State feedback includes only proportional and derivative gains
-					 * State feedback also includes optional integral compensator gain
+					 * State feedback includes only ctx->gains.proportional and ctx->gains.derivative gains
+					 * State feedback also includes optional ctx->gains.integral compensator gain
 					 */
 
-					integral = 0;
-					rotor_i_gain = 0;
-					feedforward_gain = 1;
+					ctx->gains.integral = 0;
+					ctx->gains.rotor_i_gain = 0;
+					ctx->gains.feedforward_gain = 1;
 
 					sprintf(msg, "\n\rEnter Pendulum Angle Gain.................................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &proportional);
-					sprintf(msg, "%0.2f", proportional);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.proportional);
+					sprintf(msg, "%0.2f", ctx->gains.proportional);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( proportional < 0 ){
+					if ( ctx->gains.proportional < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1376,10 +1376,10 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Pendulum Angle Derivative Gain......................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &derivative);
-					sprintf(msg, "%0.2f", derivative);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.derivative);
+					sprintf(msg, "%0.2f", ctx->gains.derivative);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( derivative < 0 ){
+					if ( ctx->gains.derivative < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1388,10 +1388,10 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Rotor Angle Gain....................................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &rotor_p_gain);
-					sprintf(msg, "%0.2f", rotor_p_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.rotor_p_gain);
+					sprintf(msg, "%0.2f", ctx->gains.rotor_p_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( rotor_p_gain < 0 ){
+					if ( ctx->gains.rotor_p_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1400,10 +1400,10 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Rotor Angle Derivative Gain.........................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &rotor_d_gain);
-					sprintf(msg, "%0.2f", rotor_d_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.rotor_d_gain);
+					sprintf(msg, "%0.2f", ctx->gains.rotor_d_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( rotor_d_gain < 0 ){
+					if ( ctx->gains.rotor_d_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1412,10 +1412,10 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Integral Compensator Gain (zero to disable).........................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &integral_compensator_gain);
-					sprintf(msg, "%0.2f", integral_compensator_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.integral_compensator_gain);
+					sprintf(msg, "%0.2f", ctx->gains.integral_compensator_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( integral_compensator_gain < 0 ){
+					if ( ctx->gains.integral_compensator_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1424,32 +1424,32 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Feedforward Gain (return or zero to set to unity)...................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &feedforward_gain);
-					if (feedforward_gain == 0){
-						feedforward_gain = 1;
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.feedforward_gain);
+					if (ctx->gains.feedforward_gain == 0){
+						ctx->gains.feedforward_gain = 1;
 					}
-					sprintf(msg, "%0.2f", feedforward_gain);
+					sprintf(msg, "%0.2f", ctx->gains.feedforward_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
-					proportional = proportional * FULL_STATE_FEEDBACK_SCALE;
-					derivative = derivative * FULL_STATE_FEEDBACK_SCALE;
-					rotor_p_gain = rotor_p_gain * FULL_STATE_FEEDBACK_SCALE;
-					rotor_d_gain = rotor_d_gain * FULL_STATE_FEEDBACK_SCALE;
-					integral_compensator_gain = integral_compensator_gain * FULL_STATE_FEEDBACK_SCALE;
-					feedforward_gain = feedforward_gain * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.proportional = ctx->gains.proportional * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.derivative = ctx->gains.derivative * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.rotor_p_gain = ctx->gains.rotor_p_gain * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.rotor_d_gain = ctx->gains.rotor_d_gain * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.integral_compensator_gain = ctx->gains.integral_compensator_gain * FULL_STATE_FEEDBACK_SCALE;
+					ctx->gains.feedforward_gain = ctx->gains.feedforward_gain * FULL_STATE_FEEDBACK_SCALE;
 				}
 
-				if (enable_state_feedback == 0){
+				if (ctx->gains.enable_state_feedback == 0){
 
 					sprintf(msg, "\n\rEnter Pendulum PID Proportional Gain......................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 							strlen(msg),
 							HAL_MAX_DELAY);
 
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &proportional);
-					sprintf(msg, "%0.2f", proportional);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.proportional);
+					sprintf(msg, "%0.2f", ctx->gains.proportional);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( proportional < 0 ){
+					if ( ctx->gains.proportional < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1460,10 +1460,10 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 							strlen(msg),
 							HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &integral);
-					sprintf(msg, "%0.2f", integral);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.integral);
+					sprintf(msg, "%0.2f", ctx->gains.integral);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( integral < 0 ){
+					if ( ctx->gains.integral < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1474,10 +1474,10 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 							strlen(msg),
 							HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &derivative);
-					sprintf(msg, "%0.2f", derivative);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.derivative);
+					sprintf(msg, "%0.2f", ctx->gains.derivative);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( derivative < 0 ){
+					if ( ctx->gains.derivative < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1489,10 +1489,10 @@ void user_configuration(AppControlContext *ctx){
 							strlen(msg),
 							HAL_MAX_DELAY);
 
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &rotor_p_gain);
-					sprintf(msg, "%0.2f", rotor_p_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.rotor_p_gain);
+					sprintf(msg, "%0.2f", ctx->gains.rotor_p_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( rotor_p_gain < 0 ){
+					if ( ctx->gains.rotor_p_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1503,10 +1503,10 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 							strlen(msg),
 							HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &rotor_i_gain);
-					sprintf(msg, "%0.2f", rotor_i_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.rotor_i_gain);
+					sprintf(msg, "%0.2f", ctx->gains.rotor_i_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( rotor_i_gain < 0 ){
+					if ( ctx->gains.rotor_i_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1515,10 +1515,10 @@ void user_configuration(AppControlContext *ctx){
 
 					sprintf(msg, "\n\rEnter Rotor PID Differential Gain.........................................: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &rotor_d_gain);
-					sprintf(msg, "%0.2f", rotor_d_gain);
+					read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.rotor_d_gain);
+					sprintf(msg, "%0.2f", ctx->gains.rotor_d_gain);
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-					if ( rotor_d_gain < 0 ){
+					if ( ctx->gains.rotor_d_gain < 0 ){
 						sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 						HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 						HAL_Delay(3000);
@@ -1746,13 +1746,13 @@ void user_configuration(AppControlContext *ctx){
 				 */
 
 				if(select_suspended_mode == 1){
-					proportional = 	-proportional;
-					integral = 		-integral;
-					derivative = 	-derivative;
-					rotor_p_gain = 	-rotor_p_gain;
-					rotor_i_gain = 	-rotor_i_gain;
-					rotor_d_gain = 	-rotor_d_gain;
-					integral_compensator_gain = -integral_compensator_gain;
+					ctx->gains.proportional = 	-ctx->gains.proportional;
+					ctx->gains.integral = 		-ctx->gains.integral;
+					ctx->gains.derivative = 	-ctx->gains.derivative;
+					ctx->gains.rotor_p_gain = 	-ctx->gains.rotor_p_gain;
+					ctx->gains.rotor_i_gain = 	-ctx->gains.rotor_i_gain;
+					ctx->gains.rotor_d_gain = 	-ctx->gains.rotor_d_gain;
+					ctx->gains.integral_compensator_gain = -ctx->gains.integral_compensator_gain;
 				}
 
 				/*
@@ -1771,7 +1771,7 @@ void user_configuration(AppControlContext *ctx){
 
 				/*
 
-				if (ctx->plant.enable_rotor_plant_gain_design == 0 && enable_state_feedback == 1 && abs(integral_compensator_gain) > 0 ){
+				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->gains.enable_state_feedback == 1 && abs(ctx->gains.integral_compensator_gain) > 0 ){
 					sprintf(msg, "\n\rEnter 1 for Rotor Plant Design Grotor = Wn^2/(s^2 + 2D*s + Wn^2) ...........: ");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.select_rotor_plant_design);
@@ -1847,7 +1847,7 @@ void user_configuration(AppControlContext *ctx){
 
 
 
-				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->plant.enable_rotor_plant_design == 0 && enable_state_feedback == 1){
+				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->plant.enable_rotor_plant_design == 0 && ctx->gains.enable_state_feedback == 1){
 
 					/* Optional addition of transfer function design
 					sprintf(msg, "\n\rEnter 1 for Rotor Plant Design Grotor = Wn/(s^3 + Wn*s^2): ");
@@ -1926,7 +1926,7 @@ void user_configuration(AppControlContext *ctx){
 
 
 
-				if (ctx->plant.enable_rotor_plant_gain_design == 0 && enable_state_feedback == 0){
+				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->gains.enable_state_feedback == 0){
 
 					/* Optional addition of transfer function design
 					sprintf(msg, "\n\rEnter 1 for Rotor Plant Design Grotor = Wn/(s^3 + Wn*s^2): ");
@@ -2014,9 +2014,9 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 				}
 
-				sprintf(msg, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", proportional, integral, derivative);
+				sprintf(msg, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.proportional, ctx->gains.integral, ctx->gains.derivative);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
-				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", rotor_p_gain, rotor_i_gain, rotor_d_gain);
+				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.rotor_p_gain, ctx->gains.rotor_i_gain, ctx->gains.rotor_d_gain);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				if (select_suspended_mode == 1){
 					sprintf(msg, "\n\rSuspended Mode gain values must be negative or zero");
@@ -2035,7 +2035,7 @@ void user_configuration(AppControlContext *ctx){
 				/* Flush read buffer  */
 				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 
 				sprintf(msg, "\n\r *** Starting Single PID Configuration Mode ***\n\r ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
@@ -2050,10 +2050,10 @@ void user_configuration(AppControlContext *ctx){
 						strlen(msg),
 						HAL_MAX_DELAY);
 
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &proportional);
-				sprintf(msg, "%0.2f", proportional);
+				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.proportional);
+				sprintf(msg, "%0.2f", ctx->gains.proportional);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if ( proportional < 0 ){
+				if ( ctx->gains.proportional < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
@@ -2064,10 +2064,10 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 						strlen(msg),
 						HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &integral);
-				sprintf(msg, "%0.2f", integral);
+				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.integral);
+				sprintf(msg, "%0.2f", ctx->gains.integral);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if ( integral < 0 ){
+				if ( ctx->gains.integral < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
@@ -2078,10 +2078,10 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,
 						strlen(msg),
 						HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &derivative);
-				sprintf(msg, "%0.2f", derivative);
+				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.derivative);
+				sprintf(msg, "%0.2f", ctx->gains.derivative);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
-				if ( derivative < 0 ){
+				if ( ctx->gains.derivative < 0 ){
 					sprintf(msg, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 					HAL_Delay(3000);
@@ -2091,9 +2091,9 @@ void user_configuration(AppControlContext *ctx){
 				/*
 				 * Rotor Controller gains for Single PID Mode
 				 */
-				rotor_p_gain = ROTOR_PID_PROPORTIONAL_GAIN_SINGLE_PID_MODE;
-				rotor_i_gain = ROTOR_PID_INTEGRAL_GAIN_SINGLE_PID_MODE;
-				rotor_d_gain = ROTOR_PID_DIFFERENTIAL_GAIN_SINGLE_PID_MODE;
+				ctx->gains.rotor_p_gain = ROTOR_PID_PROPORTIONAL_GAIN_SINGLE_PID_MODE;
+				ctx->gains.rotor_i_gain = ROTOR_PID_INTEGRAL_GAIN_SINGLE_PID_MODE;
+				ctx->gains.rotor_d_gain = ROTOR_PID_DIFFERENTIAL_GAIN_SINGLE_PID_MODE;
 
 				/*
 				 * Only inverted mode is supported in Single PID Mode
@@ -2208,20 +2208,20 @@ void user_configuration(AppControlContext *ctx){
 				 * Reverse polarity of gain values to account for suspended mode angle configuration
 				 */
 				if(select_suspended_mode == 1){
-					proportional = 	-proportional;
-					integral = 		-integral;
-					derivative = 	-derivative;
-					rotor_p_gain = 	-rotor_p_gain;
-					rotor_i_gain = 	-rotor_i_gain;
-					rotor_d_gain = 	-rotor_d_gain;
+					ctx->gains.proportional = 	-ctx->gains.proportional;
+					ctx->gains.integral = 		-ctx->gains.integral;
+					ctx->gains.derivative = 	-ctx->gains.derivative;
+					ctx->gains.rotor_p_gain = 	-ctx->gains.rotor_p_gain;
+					ctx->gains.rotor_i_gain = 	-ctx->gains.rotor_i_gain;
+					ctx->gains.rotor_d_gain = 	-ctx->gains.rotor_d_gain;
 				}
 
 				max_speed = 		MAX_SPEED_MODE_1;
 				min_speed = 		MIN_SPEED_MODE_1;
 
-				sprintf(msg, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", proportional, integral, derivative);
+				sprintf(msg, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.proportional, ctx->gains.integral, ctx->gains.derivative);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
-				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", rotor_p_gain, rotor_i_gain, rotor_d_gain);
+				sprintf(msg, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.rotor_p_gain, ctx->gains.rotor_i_gain, ctx->gains.rotor_d_gain);
 				HAL_UART_Transmit(&huart2, (uint8_t*) msg,strlen(msg),HAL_MAX_DELAY);
 				if (select_suspended_mode == 1){
 					sprintf(msg, "\n\rSuspended Mode gains must be negative");
@@ -2287,12 +2287,12 @@ void user_configuration(AppControlContext *ctx){
 				enable_full_sysid = 1;
 
 				select_suspended_mode = 1;
-				proportional = 0;
-				integral = 0;
-				derivative = 0;
-				rotor_p_gain = 0;
-				rotor_i_gain = 0;
-				rotor_d_gain = 0;
+				ctx->gains.proportional = 0;
+				ctx->gains.integral = 0;
+				ctx->gains.derivative = 0;
+				ctx->gains.rotor_p_gain = 0;
+				ctx->gains.rotor_i_gain = 0;
+				ctx->gains.rotor_d_gain = 0;
 				enable_mod_sin_rotor_tracking = 0;
 				enable_rotor_position_step_response_cycle = 0;
 				enable_rotor_chirp = 0;
@@ -2389,14 +2389,14 @@ void user_configuration(AppControlContext *ctx){
 				/* Default start mode */
 			default:
 
-				enable_state_feedback = 0;
+				ctx->gains.enable_state_feedback = 0;
 				select_suspended_mode = 0;
-				proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
-				integral = 			PRIMARY_INTEGRAL_MODE_1;
-				derivative = 		PRIMARY_DERIVATIVE_MODE_1;
-				rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
-				rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
-				rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
+				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
+				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
+				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
+				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
+				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
+				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 				max_speed = 		MAX_SPEED_MODE_1;
 				min_speed = 		MIN_SPEED_MODE_1;
 				enable_rotor_position_step_response_cycle = 0;

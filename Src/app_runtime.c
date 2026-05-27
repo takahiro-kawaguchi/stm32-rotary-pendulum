@@ -275,9 +275,9 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			ctx->core_ctl_state.PID_Pend.Kp = 419;
 			ctx->core_ctl_state.PID_Pend.Ki = 0.0;
 			ctx->core_ctl_state.PID_Pend.Kd = 56;
-			enable_state_feedback = 1;
-			integral_compensator_gain = 10;
-			feedforward_gain = 1;
+			ctx->gains.enable_state_feedback = 1;
+			ctx->gains.integral_compensator_gain = 10;
+			ctx->gains.feedforward_gain = 1;
 			rotor_position_command_steps = 0;
 			ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		}
@@ -288,9 +288,9 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			ctx->core_ctl_state.PID_Pend.Kp = -293.2;
 			ctx->core_ctl_state.PID_Pend.Ki = 0.0;
 			ctx->core_ctl_state.PID_Pend.Kd = -41.4;
-			enable_state_feedback = 1;
-			integral_compensator_gain = -11.45;
-			feedforward_gain = 1;
+			ctx->gains.enable_state_feedback = 1;
+			ctx->gains.integral_compensator_gain = -11.45;
+			ctx->gains.feedforward_gain = 1;
 			rotor_position_command_steps = 0;
 			ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 		}
@@ -387,9 +387,9 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 		ctx->core_ctl_state.PID_Pend.Ki  = ctx->init_params.Ki_pend;
 		ctx->core_ctl_state.PID_Pend.Kd  = ctx->init_params.Kd_pend;
 		ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
-		enable_state_feedback           = ctx->init_params.enable_state_feedback;
-		integral_compensator_gain       = ctx->init_params.integral_compensator_gain;
-		feedforward_gain                = ctx->init_params.feedforward_gain;
+		ctx->gains.enable_state_feedback           = ctx->init_params.enable_state_feedback;
+		ctx->gains.integral_compensator_gain       = ctx->init_params.integral_compensator_gain;
+		ctx->gains.feedforward_gain                = ctx->init_params.feedforward_gain;
 		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
 		enable_sensitivity_fnc_step     = ctx->init_params.enable_sensitivity_fnc_step;
 		enable_noise_rejection_step     = ctx->init_params.enable_noise_rejection_step;

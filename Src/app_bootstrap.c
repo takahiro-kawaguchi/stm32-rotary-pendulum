@@ -15,7 +15,6 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	angle_scale = ENCODER_READ_ANGLE_SCALE;
 
 	rotor_control_target_steps = 0;
-	rotor_control_target_steps_curr = 0;
 	app_reset_command_shaper_state(ctx);
 	ctx->core_dual_pid_runtime.current_error_rotor_integral = 0;
 	ctx->core_dual_pid_runtime.current_error_rotor_steps = 0;
@@ -83,15 +82,15 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 	torq_current_val = MAX_TORQUE_CONFIG;
 	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
 
-	proportional = PRIMARY_PROPORTIONAL_MODE_1;
-	integral = PRIMARY_INTEGRAL_MODE_1;
-	derivative = PRIMARY_DERIVATIVE_MODE_1;
-	rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_1;
-	rotor_i_gain = SECONDARY_INTEGRAL_MODE_1;
-	rotor_d_gain = SECONDARY_DERIVATIVE_MODE_1;
-	enable_state_feedback = 1;
-	integral_compensator_gain = 0;
-	feedforward_gain = 1;
+	ctx->gains.proportional = PRIMARY_PROPORTIONAL_MODE_1;
+	ctx->gains.integral = PRIMARY_INTEGRAL_MODE_1;
+	ctx->gains.derivative = PRIMARY_DERIVATIVE_MODE_1;
+	ctx->gains.rotor_p_gain = SECONDARY_PROPORTIONAL_MODE_1;
+	ctx->gains.rotor_i_gain = SECONDARY_INTEGRAL_MODE_1;
+	ctx->gains.rotor_d_gain = SECONDARY_DERIVATIVE_MODE_1;
+	ctx->gains.enable_state_feedback = 1;
+	ctx->gains.integral_compensator_gain = 0;
+	ctx->gains.feedforward_gain = 1;
 	enable_adaptive_mode = 0;
 
 	HAL_UART_Receive_DMA(&huart2, RxBuffer, UART_RX_BUFFER_SIZE);

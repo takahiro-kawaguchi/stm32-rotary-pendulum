@@ -535,22 +535,16 @@ extern uint16_t min_speed, max_speed, max_accel, max_decel;
 
 /* Control system output signal */
 extern float rotor_control_target_steps;
-extern float rotor_control_target_steps_curr;
+/* rotor_control_target_steps_curr → write-only, removed */
 /* rotor_control_target_steps_prev → CommandShaperState field, no global (dangling extern removed) */
 
 /* Control system variables */
 /* rotor_position_delta, initial_rotor_position → never referenced, removed */
 /* i, j, k, m, ret → local in app_run_control_session() */
 
-/* PID control variables */
-extern float proportional, rotor_p_gain;
-extern float integral, rotor_i_gain;
-extern float derivative, rotor_d_gain;
-
-/* State Feedback variables */
-extern int enable_state_feedback;
-extern float integral_compensator_gain;
-extern float feedforward_gain;
+/* PID control variables → ctx->gains (PidGainSet) */
+/* proportional, integral, derivative, rotor_p_gain/i/d → ctx->gains */
+/* enable_state_feedback, integral_compensator_gain, feedforward_gain → ctx->gains */
 /* Reference tracking command */
 extern float reference_tracking_command;
 

@@ -228,22 +228,14 @@ static AppControlContext g_app = {
 
 /* Control system output signal */
 float rotor_control_target_steps;
-float rotor_control_target_steps_curr;
+/* rotor_control_target_steps_curr → write-only, removed */
 
 /* Control system variables */
 /* rotor_position_delta, initial_rotor_position → never referenced, removed */
 int cycle_count;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
-/* PID control variables */
-float proportional, rotor_p_gain;
-float integral, rotor_i_gain;
-float derivative, rotor_d_gain;
-
-/* State Feedback variables */
-int enable_state_feedback;
-float integral_compensator_gain;
-float feedforward_gain;
+/* PID control variables → ctx->gains (PidGainSet) */
 /* Reference tracking command */
 float reference_tracking_command;
 

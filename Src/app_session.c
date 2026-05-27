@@ -78,7 +78,7 @@ void app_prepare_control_session(AppControlContext *ctx)
 	}
 
 	app_assign_pid_gains_from_user(ctx);
-	integral_compensator_gain = integral_compensator_gain * CONTROLLER_GAIN_SCALE;
+	ctx->gains.integral_compensator_gain *= CONTROLLER_GAIN_SCALE;
 
 	if (ctx->plant.rotor_damping_coefficient != 0 || ctx->plant.rotor_natural_frequency != 0) {
 		ctx->plant.Wn2 = ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency;
@@ -315,9 +315,9 @@ void app_run_control_session(AppControlContext *ctx)
 	ctx->init_params.Kp_pend  = ctx->core_ctl_state.PID_Pend.Kp;
 	ctx->init_params.Ki_pend  = ctx->core_ctl_state.PID_Pend.Ki;
 	ctx->init_params.Kd_pend  = ctx->core_ctl_state.PID_Pend.Kd;
-	ctx->init_params.enable_state_feedback           = enable_state_feedback;
-	ctx->init_params.integral_compensator_gain       = integral_compensator_gain;
-	ctx->init_params.feedforward_gain                = feedforward_gain;
+	ctx->init_params.enable_state_feedback           = ctx->gains.enable_state_feedback;
+	ctx->init_params.integral_compensator_gain       = ctx->gains.integral_compensator_gain;
+	ctx->init_params.feedforward_gain                = ctx->gains.feedforward_gain;
 	ctx->init_params.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
 	ctx->init_params.enable_sensitivity_fnc_step     = enable_sensitivity_fnc_step;
 	ctx->init_params.enable_noise_rejection_step     = enable_noise_rejection_step;
@@ -338,11 +338,11 @@ void app_run_control_session(AppControlContext *ctx)
 		ctx->core_ctl_state.PID_Pend.Kp = 300;
 		ctx->core_ctl_state.PID_Pend.Ki = 0.0;
 		ctx->core_ctl_state.PID_Pend.Kd = 30.0;
-		enable_state_feedback = 0;
-		integral_compensator_gain = 0;
-		feedforward_gain = 1;
+		ctx->gains.enable_state_feedback = 0;
+		ctx->gains.integral_compensator_gain = 0;
+		ctx->gains.feedforward_gain = 1;
 		rotor_position_command_steps = 0;
-		enable_state_feedback = 0;
+		ctx->gains.enable_state_feedback = 0;
 		enable_disturbance_rejection_step = 0;
 		enable_sensitivity_fnc_step = 0;
 		enable_noise_rejection_step = 0;

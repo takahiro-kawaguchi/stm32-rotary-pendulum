@@ -24,13 +24,13 @@ void app_reset_command_shaper_state(AppControlContext *ctx)
 
 void app_assign_pid_gains_from_user(AppControlContext *ctx)
 {
-	ctx->core_ctl_state.PID_Pend.Kp = proportional * CONTROLLER_GAIN_SCALE;
-	ctx->core_ctl_state.PID_Pend.Ki = integral * CONTROLLER_GAIN_SCALE;
-	ctx->core_ctl_state.PID_Pend.Kd = derivative * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Pend.Kp = ctx->gains.proportional * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Pend.Ki = ctx->gains.integral * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Pend.Kd = ctx->gains.derivative * CONTROLLER_GAIN_SCALE;
 
-	ctx->core_ctl_state.PID_Rotor.Kp = rotor_p_gain * CONTROLLER_GAIN_SCALE;
-	ctx->core_ctl_state.PID_Rotor.Ki = rotor_i_gain * CONTROLLER_GAIN_SCALE;
-	ctx->core_ctl_state.PID_Rotor.Kd = rotor_d_gain * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Rotor.Kp = ctx->gains.rotor_p_gain * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Rotor.Ki = ctx->gains.rotor_i_gain * CONTROLLER_GAIN_SCALE;
+	ctx->core_ctl_state.PID_Rotor.Kd = ctx->gains.rotor_d_gain * CONTROLLER_GAIN_SCALE;
 
 	ctx->core_ctl_state.PID_Pend.state_a[0] = 0.0f;
 	ctx->core_ctl_state.PID_Pend.state_a[1] = 0.0f;
@@ -92,9 +92,9 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		ctx->core_ctl_state.PID_Pend.Kp  = ctx->init_params.Kp_pend;
 		ctx->core_ctl_state.PID_Pend.Ki  = ctx->init_params.Ki_pend;
 		ctx->core_ctl_state.PID_Pend.Kd  = ctx->init_params.Kd_pend;
-		enable_state_feedback             = ctx->init_params.enable_state_feedback;
-		integral_compensator_gain         = ctx->init_params.integral_compensator_gain;
-		feedforward_gain                  = ctx->init_params.feedforward_gain;
+		ctx->gains.enable_state_feedback             = ctx->init_params.enable_state_feedback;
+		ctx->gains.integral_compensator_gain         = ctx->init_params.integral_compensator_gain;
+		ctx->gains.feedforward_gain                  = ctx->init_params.feedforward_gain;
 		enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
 		enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
 		enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
@@ -181,11 +181,11 @@ void control_update_dual_pid(AppControlContext *ctx)
 
 	input.rotor_position_filter_steps = rotor_position_filter_steps;
 	input.rotor_position_command_steps = rotor_position_command_steps;
-	input.feedforward_gain = feedforward_gain;
-	input.integral_compensator_gain = integral_compensator_gain;
+	input.feedforward_gain = ctx->gains.feedforward_gain;
+	input.integral_compensator_gain = ctx->gains.integral_compensator_gain;
 	input.load_disturbance_sensitivity_scale = load_disturbance_sensitivity_scale;
 	input.sample_period_rotor_s = Tsample_rotor;
-	input.enable_state_feedback = enable_state_feedback;
+	input.enable_state_feedback = ctx->gains.enable_state_feedback;
 	input.enable_disturbance_rejection_step = enable_disturbance_rejection_step;
 	input.enable_sensitivity_fnc_step = enable_sensitivity_fnc_step;
 	input.enable_noise_rejection_step = enable_noise_rejection_step;

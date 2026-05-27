@@ -6,6 +6,18 @@
 #include "controller.h"
 #include "command_shaper.h"
 
+typedef struct {
+	float proportional;
+	float integral;
+	float derivative;
+	float rotor_p_gain;
+	float rotor_i_gain;
+	float rotor_d_gain;
+	int   enable_state_feedback;
+	float integral_compensator_gain;
+	float feedforward_gain;
+} PidGainSet;
+
 /*
  * SessionInitialParams: snapshot of gain/mode state at the start of each
  * control session. Saved by app_session.c, restored by app_control.c and
@@ -70,6 +82,7 @@ typedef struct AppControlContext {
 	LoopTimingState timing;
 	RotorFilterState lpf;
 	RotorPlantState plant;
+	PidGainSet gains;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
