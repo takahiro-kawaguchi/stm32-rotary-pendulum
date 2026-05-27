@@ -522,12 +522,7 @@ extern char test_msg[128];
 /* System timing variables */
 
 extern uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
-       tick_read_cycle, tick_read_cycle_start,tick_wait_start,tick_wait;
-
-extern volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, target_cpu_cycle, prev_target_cpu_cycle;
-extern volatile int current_cpu_cycle_delay_relative_report;
-
-extern uint32_t t_sample_cpu_cycles;
+       tick_read_cycle, tick_read_cycle_start;
 extern float Tsample, Tsample_rotor;
 /* test_time → write-only, removed */
 extern float angle_scale;
@@ -546,7 +541,6 @@ extern float rotor_control_target_steps_curr;
 
 /* Control system variables */
 /* rotor_position_delta, initial_rotor_position → never referenced, removed */
-extern int cycle_count;
 /* i, j, k, m, ret → local in app_run_control_session() */
 
 /* PID control system variables */

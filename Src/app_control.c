@@ -108,7 +108,7 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		return ui_status;
 	}
 
-	if (i > cycle_count && ENABLE_CYCLE_INFINITE == 0) {
+	if (i > ctx->timing.cycle_count && ENABLE_CYCLE_INFINITE == 0) {
 		return -1;
 	}
 
@@ -240,34 +240,34 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 			&ctx->core_cmd_shaper_state, &ctx->core_ctl_out);
 }
 
-int control_wait_next_cycle(void)
+int control_wait_next_cycle(AppControlContext *ctx)
 {
-	prev_target_cpu_cycle = target_cpu_cycle;
-	target_cpu_cycle += t_sample_cpu_cycles;
+	ctx->timing.prev_target_cpu_cycle = ctx->timing.target_cpu_cycle;
+	ctx->timing.target_cpu_cycle += ctx->timing.t_sample_cpu_cycles;
 
-	current_cpu_cycle = DWT->CYCCNT;
+	ctx->timing.current_cpu_cycle = DWT->CYCCNT;
 
-	if (((int) (target_cpu_cycle - current_cpu_cycle)) > 0) {
-		if (current_cpu_cycle > target_cpu_cycle) {
+	if (((int) (ctx->timing.target_cpu_cycle - ctx->timing.current_cpu_cycle)) > 0) {
+		if (ctx->timing.current_cpu_cycle > ctx->timing.target_cpu_cycle) {
 			do {
-				last_cpu_cycle = current_cpu_cycle;
-				current_cpu_cycle = DWT->CYCCNT;
-			} while (current_cpu_cycle >= last_cpu_cycle);
+				ctx->timing.last_cpu_cycle = ctx->timing.current_cpu_cycle;
+				ctx->timing.current_cpu_cycle = DWT->CYCCNT;
+			} while (ctx->timing.current_cpu_cycle >= ctx->timing.last_cpu_cycle);
 		}
-		DWT_Delay_until_cycle(target_cpu_cycle);
-	} else if (current_cpu_cycle - target_cpu_cycle > t_sample_cpu_cycles * 5
+		DWT_Delay_until_cycle(ctx->timing.target_cpu_cycle);
+	} else if (ctx->timing.current_cpu_cycle - ctx->timing.target_cpu_cycle > ctx->timing.t_sample_cpu_cycles * 5
 			&& enable_cycle_delay_warning == 1) {
 		sprintf(msg, "Error: control loop lag\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		return 1;
 	}
 
-	current_cpu_cycle = DWT->CYCCNT;
-	current_cpu_cycle_delay_relative_report =
-			(int) (t_sample_cpu_cycles - (current_cpu_cycle - prev_cpu_cycle));
-	current_cpu_cycle_delay_relative_report =
-			(current_cpu_cycle_delay_relative_report * 1000000) / RCC_HCLK_FREQ;
-	prev_cpu_cycle = current_cpu_cycle;
+	ctx->timing.current_cpu_cycle = DWT->CYCCNT;
+	ctx->timing.current_cpu_cycle_delay_relative_report =
+			(int) (ctx->timing.t_sample_cpu_cycles - (ctx->timing.current_cpu_cycle - ctx->timing.prev_cpu_cycle));
+	ctx->timing.current_cpu_cycle_delay_relative_report =
+			(ctx->timing.current_cpu_cycle_delay_relative_report * 1000000) / RCC_HCLK_FREQ;
+	ctx->timing.prev_cpu_cycle = ctx->timing.current_cpu_cycle;
 
 	return 0;
 }

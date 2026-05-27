@@ -24,6 +24,17 @@ typedef struct {
 	int enable_rotor_plant_gain_design;
 } SessionInitialParams;
 
+typedef struct {
+	volatile uint32_t current_cpu_cycle;
+	volatile uint32_t prev_cpu_cycle;
+	volatile uint32_t last_cpu_cycle;
+	volatile uint32_t target_cpu_cycle;
+	volatile uint32_t prev_target_cpu_cycle;
+	volatile int current_cpu_cycle_delay_relative_report;
+	uint32_t t_sample_cpu_cycles;
+	int cycle_count;
+} LoopTimingState;
+
 typedef struct AppControlContext {
 	SensorRaw core_hw_raw;
 	SensorCalib core_hw_cal;
@@ -34,6 +45,7 @@ typedef struct AppControlContext {
 	ControlOutput core_ctl_out;
 	CommandShaperState core_cmd_shaper_state;
 	SessionInitialParams init_params;
+	LoopTimingState timing;
 	const ObserverOps *core_observer_ops;
 	const ControllerOps *core_controller_ops;
 	const CommandShaperOps *core_command_shaper_ops;
@@ -50,6 +62,6 @@ int control_update_state_and_safety(AppControlContext *ctx);
 void control_update_slope_correction(int i);
 void control_update_dual_pid(AppControlContext *ctx);
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i);
-int control_wait_next_cycle(void);
+int control_wait_next_cycle(AppControlContext *ctx);
 
 #endif

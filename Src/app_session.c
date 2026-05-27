@@ -4,10 +4,107 @@
 #include "app_control.h"
 #include "app_runtime.h"
 #include "app_session.h"
+#include "ui.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+void app_run_mode_loop(AppControlContext *ctx)
+{
+	int k;
+
+	while (1) {
+		ui_set_mode_interactive(0);
+		user_prompt();
+
+		if (ui_get_mode_interactive() == 0) {
+			sprintf(msg,
+					"\n\rEnter Mode Selection Now or System Will Start in Default Mode in 5 Seconds..: ");
+			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		}
+
+		if (ui_get_mode_interactive() == 1) {
+			sprintf(msg, "\n\rEnter Mode Selection Now: \n\r");
+			HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+		}
+
+		for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
+			Msg.Data[k] = 0;
+		}
+		tick_read_cycle_start = HAL_GetTick();
+		user_configuration();
+
+		app_prepare_control_session(ctx);
+		app_run_control_session(ctx);
+	}
+}
+
+void app_prepare_control_session(AppControlContext *ctx)
+{
+	BSP_MotorControl_SoftStop(0);
+	BSP_MotorControl_WaitWhileActive(0);
+	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
+	BSP_MotorControl_SetMaxSpeed(0, max_speed);
+	BSP_MotorControl_SetMinSpeed(0, min_speed);
+	BSP_MotorControl_SetAcceleration(0, MAX_ACCEL);
+	BSP_MotorControl_SetDeceleration(0, MAX_DECEL);
+
+	if (ACCEL_CONTROL == 0) {
+		sprintf(msg, "\n\rMotor Profile Speeds Set at Min %u Max %u Steps per Second",
+				min_speed, max_speed);
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+	if (select_suspended_mode == 0) {
+		sprintf(msg, "\n\rInverted Pendulum Mode Selected");
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+	if (select_suspended_mode == 1) {
+		sprintf(msg, "\n\rSuspended Pendulum Mode Selected");
+		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+	}
+
+	sprintf(msg, "\n\rMotor Torque Current Set at %0.1f mA", torq_current_val);
+	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+
+	if (enable_motor_actuator_characterization_mode == 1) {
+		motor_actuator_characterization_mode();
+	}
+	if (enable_rotor_actuator_control == 1) {
+		interactive_rotor_actuator_control();
+	}
+	if (enable_rotor_actuator_test == 1) {
+		rotor_encoder_test();
+	}
+
+	app_assign_pid_gains_from_user(ctx);
+	integral_compensator_gain = integral_compensator_gain * CONTROLLER_GAIN_SCALE;
+
+	if (rotor_damping_coefficient != 0 || rotor_natural_frequency != 0) {
+		Wn2 = rotor_natural_frequency * rotor_natural_frequency;
+		rotor_plant_gain = rotor_plant_gain * Wn2;
+		ao = ((2.0F / Tsample) * (2.0F / Tsample)
+				+ (2.0F / Tsample) * 2.0F * rotor_damping_coefficient
+						* rotor_natural_frequency
+				+ rotor_natural_frequency * rotor_natural_frequency);
+		c0 = ((2.0F / Tsample) * (2.0F / Tsample) / ao);
+		c1 = -2.0F * c0;
+		c2 = c0;
+		c3 = -(2.0F * rotor_natural_frequency * rotor_natural_frequency
+				- 2.0F * (2.0F / Tsample) * (2.0F / Tsample)) / ao;
+		c4 = -((2.0F / Tsample) * (2.0F / Tsample)
+				- (2.0F / Tsample) * 2.0F * rotor_damping_coefficient
+						* rotor_natural_frequency
+				+ rotor_natural_frequency * rotor_natural_frequency) / ao;
+	}
+
+	if (enable_rotor_plant_design == 2) {
+		IWon_r = 2 / (Wo_r * Tsample);
+		iir_0_r = 1 - (1 / (1 + IWon_r));
+		iir_1_r = -iir_0_r;
+		iir_2_r = (1 / (1 + IWon_r)) * (1 - IWon_r);
+	}
+}
 
 void app_run_control_session(AppControlContext *ctx)
 {
@@ -123,7 +220,7 @@ void app_run_control_session(AppControlContext *ctx)
 	}
 
 	if (enable_swing_up == 0) {
-		tick_wait_start = HAL_GetTick();
+		uint32_t tick_wait_start = HAL_GetTick();
 		if (select_suspended_mode == 0) {
 			while (1) {
 				ret = hardware_encoder_position_read(&encoder_position_steps,
@@ -142,7 +239,7 @@ void app_run_control_session(AppControlContext *ctx)
 					HAL_Delay(START_ANGLE_DELAY);
 					break;
 				}
-				tick_wait = HAL_GetTick();
+				uint32_t tick_wait = HAL_GetTick();
 
 				if ((tick_wait - tick_wait_start)
 						> PENDULUM_ORIENTATION_START_DELAY) {
@@ -166,7 +263,7 @@ void app_run_control_session(AppControlContext *ctx)
 	*current_error_steps = 0;
 	*current_error_rotor_steps = 0;
 
-	cycle_count = CYCLE_LIMIT;
+	ctx->timing.cycle_count = CYCLE_LIMIT;
 	rotor_position_steps = 0;
 	rotor_position_steps_prev = 0;
 	rotor_position_filter_steps = 0;
@@ -191,14 +288,13 @@ void app_run_control_session(AppControlContext *ctx)
 	pendulum_position_command_steps = 0;
 	impulse_start_index = 0;
 	mode_transition_state = 0;
-	transition_to_adaptive_mode = 0;
 	adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
 	rotor_position_command_steps_pf_prev = 0;
 	enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
 	rotor_track_comb_command = 0;
 	full_sysid_start_index = -1;
-	current_cpu_cycle = 0;
+	ctx->timing.current_cpu_cycle = 0;
 	speed_scale = DATA_REPORT_SPEED_SCALE;
 	speed_governor = 0;
 	encoder_position_offset = 0;
@@ -336,8 +432,8 @@ void app_run_control_session(AppControlContext *ctx)
 	torq_current_val = MAX_TORQUE_CONFIG;
 	L6474_SetAnalogValue(0, L6474_TVAL, torq_current_val);
 
-	target_cpu_cycle = DWT->CYCCNT;
-	prev_cpu_cycle = DWT->CYCCNT;
+	ctx->timing.target_cpu_cycle = DWT->CYCCNT;
+	ctx->timing.prev_cpu_cycle = DWT->CYCCNT;
 
 	ret = hardware_encoder_position_read(&encoder_position_steps, encoder_position_init,
 			&htim3);

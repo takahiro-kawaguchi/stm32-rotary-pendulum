@@ -116,8 +116,8 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 
 	*deriv_lp_corner_f = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY;
 	*deriv_lp_corner_f_rotor = DERIVATIVE_LOW_PASS_CORNER_FREQUENCY_ROTOR;
-	t_sample_cpu_cycles = (uint32_t) round(T_SAMPLE_DEFAULT * RCC_HCLK_FREQ);
-	Tsample = (float) t_sample_cpu_cycles / RCC_HCLK_FREQ;
+	ctx->timing.t_sample_cpu_cycles = (uint32_t) round(T_SAMPLE_DEFAULT * RCC_HCLK_FREQ);
+	Tsample = (float) ctx->timing.t_sample_cpu_cycles / RCC_HCLK_FREQ;
 	*sample_period = Tsample;
 	Tsample_rotor = Tsample;
 	*sample_period_rotor = Tsample_rotor;

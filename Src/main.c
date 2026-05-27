@@ -435,12 +435,8 @@ int mode_transition_state;
 /* System timing variables */
 
 uint32_t tick, tick_cycle_current, tick_cycle_previous, tick_cycle_start,
-tick_read_cycle, tick_read_cycle_start,tick_wait_start,tick_wait;
+tick_read_cycle, tick_read_cycle_start;
 
-volatile uint32_t current_cpu_cycle, prev_cpu_cycle, last_cpu_cycle, target_cpu_cycle, prev_target_cpu_cycle;
-volatile int current_cpu_cycle_delay_relative_report;
-
-uint32_t t_sample_cpu_cycles;
 float Tsample, Tsample_rotor;
 /* test_time → write-only (never read), removed */
 float angle_scale;
