@@ -547,7 +547,7 @@ void set_mode_strings(void){
 	mode_quit = 0;
 }
 
-int ui_process_runtime_input(int cycle_index,
+int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 		arm_pid_instance_a_f32 *PID_Pend,
 		arm_pid_instance_a_f32 *PID_Rotor)
 {
@@ -712,7 +712,7 @@ static void get_user_mode_index(char * user_string, int * char_mode_select, int 
 
 }
 
-void user_configuration(void){
+void user_configuration(AppControlContext *ctx){
 	int k;
 
 	enable_rotor_actuator_test = 0;
@@ -2592,7 +2592,7 @@ void rotor_encoder_test(void){
  * Rotor actuator characterization mode
  */
 
-void motor_actuator_characterization_mode(void){
+void motor_actuator_characterization_mode(AppControlContext *ctx){
 	int i, j, k;
 	/*
 	 * Set Motor Speed Profile
@@ -2792,12 +2792,12 @@ void motor_actuator_characterization_mode(void){
 			}
 
 			if (i == 0) {
-				cycle_period_start = HAL_GetTick();
-				cycle_period_sum = 100 * Tsample * 1000 - 1;
+				ctx->timing.cycle_period_start = HAL_GetTick();
+				ctx->timing.cycle_period_sum = 100 * Tsample * 1000 - 1;
 			}
 			if (i % 100 == 0) {
-				cycle_period_sum = HAL_GetTick() - cycle_period_start;
-				cycle_period_start = HAL_GetTick();
+				ctx->timing.cycle_period_sum = HAL_GetTick() - ctx->timing.cycle_period_start;
+				ctx->timing.cycle_period_start = HAL_GetTick();
 			}
 
 			tick_cycle_previous = tick_cycle_current;
@@ -2848,7 +2848,7 @@ void motor_actuator_characterization_mode(void){
 			current_speed = BSP_MotorControl_GetCurrentSpeed(0);
 			sprintf(msg,
 					"%i\t%i\t%i\t%i\t%i\t%f\t%i\t%i\t%i\t%i\t%i\r\n", i,
-					cycle_period_sum,
+					ctx->timing.cycle_period_sum,
 					(int) (tick_cycle_current - tick_cycle_previous),
 					current_speed, rotor_position_steps,
 					rotor_position_command_steps, motor_state,

@@ -102,7 +102,7 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
 	}
 
-	int ui_status = ui_process_runtime_input(i, &ctx->core_ctl_state.PID_Pend,
+	int ui_status = ui_process_runtime_input(i, ctx, &ctx->core_ctl_state.PID_Pend,
 			&ctx->core_ctl_state.PID_Rotor);
 	if (ui_status != 0) {
 		return ui_status;
@@ -250,7 +250,7 @@ int control_wait_next_cycle(AppControlContext *ctx)
 		}
 		DWT_Delay_until_cycle(ctx->timing.target_cpu_cycle);
 	} else if (ctx->timing.current_cpu_cycle - ctx->timing.target_cpu_cycle > ctx->timing.t_sample_cpu_cycles * 5
-			&& enable_cycle_delay_warning == 1) {
+			&& ctx->timing.enable_cycle_delay_warning == 1) {
 		sprintf(msg, "Error: control loop lag\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 		return 1;

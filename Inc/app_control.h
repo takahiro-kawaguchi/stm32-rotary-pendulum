@@ -33,6 +33,9 @@ typedef struct {
 	volatile int current_cpu_cycle_delay_relative_report;
 	uint32_t t_sample_cpu_cycles;
 	int cycle_count;
+	int cycle_period_start;
+	int cycle_period_sum;
+	int enable_cycle_delay_warning;
 } LoopTimingState;
 
 typedef struct AppControlContext {

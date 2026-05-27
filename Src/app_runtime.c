@@ -303,7 +303,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			encoder_position_offset_zero = 0;
 		}
 		if (offset_end_state == 0) {
-			enable_cycle_delay_warning = 0;
+			ctx->timing.enable_cycle_delay_warning = 0;
 			if (i > 1 && i < 4000) {
 				rotor_position_command_steps =
 						(i / 4000.0) * ANGLE_CAL_OFFSET_STEP_COUNT / 2;
@@ -339,7 +339,7 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 			if (rotor_position_command_steps >= 0 && angle_index == 0) {
 				offset_end_state = 1;
 				angle_cal_end = i;
-				enable_cycle_delay_warning = 1;
+				ctx->timing.enable_cycle_delay_warning = 1;
 			}
 		}
 	}
@@ -406,12 +406,12 @@ static void report_data(AppControlContext *ctx, int i)
 	}
 
 	if (i == 1) {
-		cycle_period_start = HAL_GetTick();
-		cycle_period_sum = 100 * Tsample * 1000 - 1;
+		ctx->timing.cycle_period_start = HAL_GetTick();
+		ctx->timing.cycle_period_sum = 100 * Tsample * 1000 - 1;
 	}
 	if (i % 100 == 0) {
-		cycle_period_sum = HAL_GetTick() - cycle_period_start;
-		cycle_period_start = HAL_GetTick();
+		ctx->timing.cycle_period_sum = HAL_GetTick() - ctx->timing.cycle_period_start;
+		ctx->timing.cycle_period_start = HAL_GetTick();
 	}
 	tick = HAL_GetTick();
 	tick_cycle_previous = tick_cycle_current;
@@ -419,7 +419,7 @@ static void report_data(AppControlContext *ctx, int i)
 
 	if (enable_high_speed_sampling == 1 && enable_rotor_chirp == 1
 			&& enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", cycle_period_sum - 200,
+		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(encoder_position)), display_parameter,
 				(int) (roundf(rotor_control_target_steps)),
 				(int) (reference_tracking_command));
@@ -435,7 +435,7 @@ static void report_data(AppControlContext *ctx, int i)
 	}
 	if (enable_high_speed_sampling == 1 && enable_rotor_chirp == 0
 			&& enable_rotor_tracking_comb_signal == 0 && ACCEL_CONTROL_DATA == 0) {
-		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", cycle_period_sum - 200,
+		sprintf(msg, "%i\t%i\t%i\t%i\t%i\r\n", ctx->timing.cycle_period_sum - 200,
 				(int) (roundf(encoder_position)), display_parameter,
 				(int) (roundf(rotor_control_target_steps)),
 				(int) (reference_tracking_command));
@@ -478,7 +478,7 @@ static void report_data(AppControlContext *ctx, int i)
 	if (enable_high_speed_sampling == 0) {
 		if (report_mode != 1000 && report_mode != 2000 && speed_governor == 0) {
 			sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
-					cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
+					ctx->timing.cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
 					(int) (roundf(encoder_position)), display_parameter,
 					(int) (ctx->core_ctl_state.PID_Pend.int_term) / 100,
 					reference_tracking_command,
@@ -489,7 +489,7 @@ static void report_data(AppControlContext *ctx, int i)
 		if (report_mode != 1000 && report_mode != 2000 && (i % speed_scale) == 0
 				&& speed_governor == 1) {
 			sprintf(msg, "%i\t%i\t%i\t%i\t%i\t%i\t%.1f\t%i\t%i\r\n", (int) 2,
-					cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
+					ctx->timing.cycle_period_sum - 200, ctx->timing.current_cpu_cycle_delay_relative_report,
 					(int) (roundf(encoder_position)), display_parameter,
 					(int) (ctx->core_ctl_state.PID_Pend.int_term) / 100,
 					reference_tracking_command,

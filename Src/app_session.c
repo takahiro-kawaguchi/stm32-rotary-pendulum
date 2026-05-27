@@ -33,7 +33,7 @@ void app_run_mode_loop(AppControlContext *ctx)
 			Msg.Data[k] = 0;
 		}
 		tick_read_cycle_start = HAL_GetTick();
-		user_configuration();
+		user_configuration(ctx);
 
 		app_prepare_control_session(ctx);
 		app_run_control_session(ctx);
@@ -68,7 +68,7 @@ void app_prepare_control_session(AppControlContext *ctx)
 	HAL_UART_Transmit(&huart2, (uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
 
 	if (enable_motor_actuator_characterization_mode == 1) {
-		motor_actuator_characterization_mode();
+		motor_actuator_characterization_mode(ctx);
 	}
 	if (enable_rotor_actuator_control == 1) {
 		interactive_rotor_actuator_control();
@@ -282,7 +282,7 @@ void app_run_control_session(AppControlContext *ctx)
 	tick_cycle_start = HAL_GetTick();
 	tick_cycle_previous = tick_cycle_start;
 	tick_cycle_current = tick_cycle_start;
-	enable_cycle_delay_warning = ENABLE_CYCLE_DELAY_WARNING;
+	ctx->timing.enable_cycle_delay_warning = ENABLE_CYCLE_DELAY_WARNING;
 	chirp_cycle = 0;
 	chirp_dwell_cycle = 0;
 	pendulum_position_command_steps = 0;

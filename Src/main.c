@@ -240,11 +240,6 @@ static float _sample_period, _sample_period_rotor;
 float *sample_period       = &_sample_period;
 float *sample_period_rotor = &_sample_period_rotor;
 
-/* Loop timing measurement variables */
-int cycle_period_start;
-int cycle_period_sum;
-int enable_cycle_delay_warning;
-
 /* PID control variables */
 static float _deriv_lp_corner_f, _deriv_lp_corner_f_rotor;
 float *deriv_lp_corner_f       = &_deriv_lp_corner_f;

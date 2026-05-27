@@ -467,7 +467,6 @@ extern void MX_TIM3_Init(void);
 extern void MX_USART2_UART_Init(void);
 extern void Error_Handler(uint16_t error);
 extern void select_mode_1(void);
-extern void user_configuration(void);
 extern int Delay_Pulse();
 extern void Main_StepClockHandler();
 extern void apply_acceleration(float * acc, float* target_velocity_prescaled, float t_sample);
@@ -545,11 +544,6 @@ extern float rotor_control_target_steps_curr;
 
 /* PID control system variables */
 extern float *sample_period, *sample_period_rotor;
-
-/* Loop timing measurement variables */
-extern int cycle_period_start;
-extern int cycle_period_sum;
-extern int enable_cycle_delay_warning;
 
 /* PID control variables */
 extern float *deriv_lp_corner_f;
