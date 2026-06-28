@@ -265,7 +265,7 @@
  * host.
  */
 
-#define START_DEFAULT_MODE_TIME 60000			// 15 second delay to permit user input after system start
+#define START_DEFAULT_MODE_TIME 60000			// delay in ms to permit user input after system start
 												// If no user response then set default values
 #define PENDULUM_ORIENTATION_START_DELAY 10000	// Time permitted to user to orient Pendulum vertical at start
 

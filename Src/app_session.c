@@ -27,7 +27,8 @@ void app_run_mode_loop(AppControlContext *ctx)
 
 		if (ui_get_mode_interactive() == 0) {
 			sprintf(uart_tx_buf,
-					"\n\rEnter Mode Selection Now or System Will Start in Default Mode in 5 Seconds..: ");
+					"\n\rEnter Mode Selection Now or System Will Start in Default Mode in %u Seconds..: ",
+					START_DEFAULT_MODE_TIME / 1000);
 			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 		}
 

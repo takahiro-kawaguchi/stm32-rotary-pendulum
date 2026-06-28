@@ -685,7 +685,7 @@ void user_configuration(AppControlContext *ctx){
 				if (sel == 'A' || sel == 'B') {
 					ctx->core_controller_ops = (sel == 'B') ? &CONTROLLER_OPS_REMOTE
 					                                        : &CONTROLLER_OPS_DEFAULT;
-					ctx->gains.enable_state_feedback = 1;
+					ctx->gains.enable_state_feedback = 0;
 					ctx->select_suspended_mode = 0;
 					ctx->enc_cal.enable_angle_cal = 1;
 					ctx->enable_swing_up = 1;
