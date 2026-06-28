@@ -16,7 +16,7 @@ static int char_mode_select;
 static int mode_interactive;
 static int step_size;
 static int mode_1, mode_2;
-static int mode_8, mode_10, mode_11, mode_13, mode_15;
+static int mode_8, mode_11, mode_13, mode_15;
 static int mode_quit;
 
 static char mode_string_stop[UART_RX_BUFFER_SIZE];
@@ -27,7 +27,6 @@ static char mode_string_inc_accel[UART_RX_BUFFER_SIZE];
 static char mode_string_dec_accel[UART_RX_BUFFER_SIZE];
 static char mode_string_inc_amp[UART_RX_BUFFER_SIZE];
 static char mode_string_dec_amp[UART_RX_BUFFER_SIZE];
-static char mode_string_mode_single_pid[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_test[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_control[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_motor_characterization_mode[UART_RX_BUFFER_SIZE];
@@ -406,7 +405,6 @@ void set_mode_strings(void){
 	sprintf(mode_string_mode_1, "1");
 	sprintf(mode_string_mode_2, "2");
 	sprintf(mode_string_mode_8, "g");
-	sprintf(mode_string_mode_single_pid, "s");
 	sprintf(mode_string_mode_test, "t");
 	sprintf(mode_string_mode_control, "r");
 	sprintf(mode_string_mode_motor_characterization_mode, "c");
@@ -462,7 +460,6 @@ void set_mode_strings(void){
 	mode_1 = 1;
 	mode_2 = 2;
 	mode_8 = 8;
-	mode_10 = 10;
 	mode_11 = 11;
 	mode_13 = 13;
 	mode_15 = 15;
@@ -543,8 +540,6 @@ void user_prompt(void){
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 2 at prompt for Suspended Pendulum Control.............................. \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-	sprintf(uart_tx_buf, "Enter 's' at prompt for Single PID Pendulum Controller Gain Entry ............ \n\r");
-	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 'g' at prompt for General Mode: Full State Feedback and PID Controller.. \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 't' at prompt for Test of Rotor Actuator and Pendulum Angle Encoder..... \n\r");
@@ -566,11 +561,6 @@ int ui_get_mode_interactive(void)
 static void get_user_mode_index(char * user_string, int * char_mode_select, int * mode_index){
 
 	*char_mode_select = 0;
-
-	if (strcmp(user_string,mode_string_mode_single_pid)==0){
-		*mode_index = 10;
-		*char_mode_select = 1;
-	}
 
 	if (strcmp(user_string,mode_string_mode_test)==0){
 		*mode_index = 11;
@@ -608,11 +598,6 @@ static void get_user_mode_index(char * user_string, int * char_mode_select, int 
 
 	case 8:
 		*mode_index = mode_8;
-		mode_interactive = 1;
-		break;
-
-	case 10:
-		*mode_index = mode_10;
 		mode_interactive = 1;
 		break;
 
@@ -1270,140 +1255,6 @@ void user_configuration(AppControlContext *ctx){
 				ctx->max_speed = 		MAX_SPEED_MODE_1;
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
 
-
-				break;
-
-				/* Interactive entry of Pendulum Controller gains for Single PID Inverted Mode */
-
-			case 10:
-				/* Flush read buffer  */
-				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
-
-				ctx->gains.enable_state_feedback = 0;
-
-				sprintf(uart_tx_buf, "\n\r *** Starting Single PID Configuration Mode ***\n\r ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf),
-						HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rEnter Pendulum PID Proportional Gain .................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf),
-						HAL_MAX_DELAY);
-
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.proportional);
-				sprintf(uart_tx_buf, "%0.2f", ctx->gains.proportional);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->gains.proportional < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				sprintf(uart_tx_buf, "\n\rEnter Pendulum PID Integral Gain .....................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf),
-						HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.integral);
-				sprintf(uart_tx_buf, "%0.2f", ctx->gains.integral);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->gains.integral < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				sprintf(uart_tx_buf, "\n\rEnter Pendulum PID Differential Gain .................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf),
-						HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->gains.derivative);
-				sprintf(uart_tx_buf, "%0.2f", ctx->gains.derivative);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->gains.derivative < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				/*
-				 * Rotor Controller gains for Single PID Mode
-				 */
-				ctx->gains.rotor_p_gain = ROTOR_PID_PROPORTIONAL_GAIN_SINGLE_PID_MODE;
-				ctx->gains.rotor_i_gain = ROTOR_PID_INTEGRAL_GAIN_SINGLE_PID_MODE;
-				ctx->gains.rotor_d_gain = ROTOR_PID_DIFFERENTIAL_GAIN_SINGLE_PID_MODE;
-
-				/*
-				 * Only inverted mode is supported in Single PID Mode
-				 */
-
-				ctx->select_suspended_mode = 0;
-
-				ctx->enc_cal.enable_angle_cal = 0;
-
-				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable ..............: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
-				if (enable_angle_cal_resp == 0){
-					ctx->enc_cal.enable_angle_cal = 1;
-				}
-				sprintf(uart_tx_buf, "%i", enable_angle_cal_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_angle_cal_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-
-				ctx->enable_swing_up = ENABLE_SWING_UP;
-				enable_swing_up_resp = 0;
-				sprintf(uart_tx_buf, "\n\rSwing Up Enabled - Enter 1 to Disable ................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
-				if (enable_swing_up_resp == 1){
-					ctx->enable_swing_up = 0;
-				}
-				sprintf(uart_tx_buf, "%i", enable_swing_up_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_swing_up_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-
-				/*
-				 * Reverse polarity of gain values to account for suspended mode angle configuration
-				 */
-				if(ctx->select_suspended_mode == 1){
-					ctx->gains.proportional = 	-ctx->gains.proportional;
-					ctx->gains.integral = 		-ctx->gains.integral;
-					ctx->gains.derivative = 	-ctx->gains.derivative;
-					ctx->gains.rotor_p_gain = 	-ctx->gains.rotor_p_gain;
-					ctx->gains.rotor_i_gain = 	-ctx->gains.rotor_i_gain;
-					ctx->gains.rotor_d_gain = 	-ctx->gains.rotor_d_gain;
-				}
-
-				ctx->max_speed = 		MAX_SPEED_MODE_1;
-				ctx->min_speed = 		MIN_SPEED_MODE_1;
-
-				sprintf(uart_tx_buf, "\n\rPendulum PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.proportional, ctx->gains.integral, ctx->gains.derivative);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf),HAL_MAX_DELAY);
-				sprintf(uart_tx_buf, "\n\rRotor PID Gains: \tP: %.02f; I: %.02f; D: %.02f", ctx->gains.rotor_p_gain, ctx->gains.rotor_i_gain, ctx->gains.rotor_d_gain);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf),HAL_MAX_DELAY);
-				if (ctx->select_suspended_mode == 1){
-					sprintf(uart_tx_buf, "\n\rSuspended Mode gains must be negative");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf),HAL_MAX_DELAY);
-				}
 
 				break;
 
