@@ -742,45 +742,13 @@ void user_configuration(AppControlContext *ctx){
 				ctx->max_speed = 		MAX_SPEED_MODE_1;
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
 
-				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rMode %i Configured\n\r", mode_index);
+				sprintf(uart_tx_buf, "\n\rMode 1 Configured\n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
 
-				ctx->enc_cal.enable_angle_cal = 0;
-				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
-				if (enable_angle_cal_resp == 0){
-					ctx->enc_cal.enable_angle_cal = 1;
-				}
-				sprintf(uart_tx_buf, "%i", enable_angle_cal_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_angle_cal_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				ctx->enable_swing_up = ENABLE_SWING_UP;
-				enable_swing_up_resp = 0;
-				sprintf(uart_tx_buf, "\n\rSwing Up Enabled - Enter 1 to Disable.....................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
-				if (enable_swing_up_resp == 1){
-					ctx->enable_swing_up = 0;
-				}
-				sprintf(uart_tx_buf, "%i", enable_swing_up_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_swing_up_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
+				ctx->enc_cal.enable_angle_cal = 1;
+				ctx->enable_swing_up = 1;
+				L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
 
 				break;
 
@@ -804,25 +772,7 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
 
-				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				ctx->enc_cal.enable_angle_cal = 0;
-				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
-				if (enable_angle_cal_resp == 0){
-					ctx->enc_cal.enable_angle_cal = 1;
-				}
-				sprintf(uart_tx_buf, "%i", enable_angle_cal_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_angle_cal_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
+				ctx->enc_cal.enable_angle_cal = 1;
 
 				break;
 
@@ -1252,9 +1202,10 @@ void user_configuration(AppControlContext *ctx){
 					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf),HAL_MAX_DELAY);
 				}
 
-				ctx->max_speed = 		MAX_SPEED_MODE_1;
-				ctx->min_speed = 		MIN_SPEED_MODE_1;
-
+				ctx->max_speed = MAX_SPEED_MODE_1;
+				ctx->min_speed = MIN_SPEED_MODE_1;
+				ctx->enc_cal.enable_angle_cal = 1;
+				ctx->enable_swing_up = (ctx->select_suspended_mode == 0) ? 1 : 0;
 
 				break;
 
