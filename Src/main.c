@@ -278,9 +278,6 @@ int main(void) {
 	current_pwm_period = 0;
 	target_velocity_prescaled = 0;
 
-	/* Initialize default start mode and reporting mode */
-	g_app.report_mode = 1;
-
 	app_bootstrap_system(&g_app, &gL6474InitParams);
 	app_run_mode_loop(&g_app);
 	return 0;

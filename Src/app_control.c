@@ -98,8 +98,6 @@ int control_handle_runtime_configuration(AppControlContext *ctx, int i)
 		ctx->gains.enable_disturbance_rejection_step = ctx->init_params.enable_disturbance_rejection_step;
 		ctx->gains.enable_sensitivity_fnc_step       = ctx->init_params.enable_sensitivity_fnc_step;
 		ctx->gains.enable_noise_rejection_step       = ctx->init_params.enable_noise_rejection_step;
-		ctx->plant.enable_rotor_plant_design         = ctx->init_params.enable_rotor_plant_design;
-		ctx->plant.enable_rotor_plant_gain_design    = ctx->init_params.enable_rotor_plant_gain_design;
 	}
 
 	int ui_status = ui_process_runtime_input(i, ctx, &ctx->core_ctl_state.PID_Pend,
@@ -210,24 +208,24 @@ void control_finalize_command_and_actuate(AppControlContext *ctx, int i)
 	shaper_cfg.sample_period_s = ctx->timing.t_sample_s;
 	shaper_cfg.accel_control = ACCEL_CONTROL;
 	shaper_cfg.angle_cal_complete = ctx->enc_cal.angle_cal_complete;
-	shaper_cfg.full_sysid_start_index = ctx->tracking.full_sysid_start_index;
-	shaper_cfg.full_sysid_max_vel_amplitude_deg_per_s = ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s;
-	shaper_cfg.full_sysid_min_freq_hz = ctx->tracking.full_sysid_min_freq_hz;
-	shaper_cfg.full_sysid_num_freqs = ctx->tracking.full_sysid_num_freqs;
-	shaper_cfg.full_sysid_freq_log_step = ctx->tracking.full_sysid_freq_log_step;
-	shaper_cfg.enable_rotor_plant_design = ctx->plant.enable_rotor_plant_design;
-	shaper_cfg.enable_rotor_plant_gain_design = ctx->plant.enable_rotor_plant_gain_design;
-	shaper_cfg.rotor_plant_gain = ctx->plant.rotor_plant_gain;
-	shaper_cfg.rotor_damping_coefficient = ctx->plant.rotor_damping_coefficient;
-	shaper_cfg.rotor_natural_frequency = ctx->plant.rotor_natural_frequency;
-	shaper_cfg.c0 = ctx->plant.c0;
-	shaper_cfg.c1 = ctx->plant.c1;
-	shaper_cfg.c2 = ctx->plant.c2;
-	shaper_cfg.c3 = ctx->plant.c3;
-	shaper_cfg.c4 = ctx->plant.c4;
-	shaper_cfg.iir_0_r = ctx->plant.iir_0_r;
-	shaper_cfg.iir_1_r = ctx->plant.iir_1_r;
-	shaper_cfg.iir_2_r = ctx->plant.iir_2_r;
+	shaper_cfg.full_sysid_start_index = -1;
+	shaper_cfg.full_sysid_max_vel_amplitude_deg_per_s = 0.0f;
+	shaper_cfg.full_sysid_min_freq_hz = 0.0f;
+	shaper_cfg.full_sysid_num_freqs = 0;
+	shaper_cfg.full_sysid_freq_log_step = 0.0f;
+	shaper_cfg.enable_rotor_plant_design = 0;
+	shaper_cfg.enable_rotor_plant_gain_design = 0;
+	shaper_cfg.rotor_plant_gain = 0.0f;
+	shaper_cfg.rotor_damping_coefficient = 0.0f;
+	shaper_cfg.rotor_natural_frequency = 0.0f;
+	shaper_cfg.c0 = 0.0f;
+	shaper_cfg.c1 = 0.0f;
+	shaper_cfg.c2 = 0.0f;
+	shaper_cfg.c3 = 0.0f;
+	shaper_cfg.c4 = 0.0f;
+	shaper_cfg.iir_0_r = 0.0f;
+	shaper_cfg.iir_1_r = 0.0f;
+	shaper_cfg.iir_2_r = 0.0f;
 
 	ctx->core_command_shaper_ops->process_and_actuate(&shaper_cfg, i,
 			ctx->rotor_pos.rotor_position_command_steps, &ctx->rotor_pos.rotor_control_target_steps,

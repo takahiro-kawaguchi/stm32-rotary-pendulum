@@ -1,4 +1,4 @@
-﻿#ifndef APP_CONTROL_H
+#ifndef APP_CONTROL_H
 #define APP_CONTROL_H
 
 #include "hardware.h"
@@ -37,8 +37,6 @@ typedef struct {
 	int enable_disturbance_rejection_step;
 	int enable_sensitivity_fnc_step;
 	int enable_noise_rejection_step;
-	int enable_rotor_plant_design;
-	int enable_rotor_plant_gain_design;
 } SessionInitialParams;
 
 typedef struct {
@@ -64,19 +62,6 @@ typedef struct {
 } LoopTimingState;
 
 typedef struct {
-	int select_rotor_plant_design;
-	int enable_rotor_plant_design;
-	int enable_rotor_plant_gain_design;
-	float rotor_plant_gain;
-	float rotor_damping_coefficient;
-	float rotor_natural_frequency;
-	float ao, Wn2;
-	float c0, c1, c2, c3, c4;
-	float fo_r, Wo_r, IWon_r;
-	float iir_0_r, iir_1_r, iir_2_r;
-} RotorPlantState;
-
-typedef struct {
 	float iir_0, iir_1, iir_2;           /* rotor position LP filter */
 	float iir_LT_0, iir_LT_1, iir_LT_2; /* long-term LP filter */
 	float iir_0_s, iir_1_s, iir_2_s;    /* step-response LP filter */
@@ -84,11 +69,8 @@ typedef struct {
 
 typedef struct {
 	float rotor_control_target_steps;
-	float reference_tracking_command;
 	int   rotor_position_steps;
 	float rotor_position_command_steps;
-	float rotor_position_command_steps_pf;
-	float rotor_position_command_steps_pf_prev;
 	float rotor_position_steps_prev;
 	float rotor_position_filter_steps;
 	float rotor_position_filter_steps_prev;
@@ -96,8 +78,6 @@ typedef struct {
 	float rotor_position_diff_prev;
 	float rotor_position_diff_filter;
 	float rotor_position_diff_filter_prev;
-	int   rotor_position_step_polarity;
-	int   impulse_start_index;
 } RotorPositionState;
 
 typedef struct {
@@ -120,38 +100,6 @@ typedef struct {
 	float encoder_angle_slope_corr_steps;
 } EncoderCalibState;
 
-typedef struct {
-	int   enable_rotor_chirp;
-	int   chirp_cycle;
-	int   chirp_dwell_cycle;
-	float chirp_time;
-	float rotor_chirp_start_freq;
-	float rotor_chirp_end_freq;
-	float rotor_chirp_period;
-	float rotor_chirp_frequency;
-	float pendulum_position_command_steps;
-	int   enable_mod_sin_rotor_tracking;
-	int   enable_rotor_position_step_response_cycle;
-	int   disable_mod_sin_rotor_tracking;
-	int   sine_drive_transition;
-	float mod_sin_amplitude;
-	float rotor_control_sin_amplitude;
-	float rotor_sine_drive;
-	float rotor_sine_drive_mod;
-	float rotor_mod_control;
-	float mod_sin_carrier_frequency;
-	int   enable_pendulum_position_impulse_response_cycle;
-	float full_sysid_max_vel_amplitude_deg_per_s;
-	float full_sysid_min_freq_hz;
-	int   full_sysid_num_freqs;
-	float full_sysid_freq_log_step;
-	int   full_sysid_start_index;
-	int   enable_rotor_tracking_comb_signal;
-	float rotor_track_comb_signal_frequency;
-	float rotor_track_comb_command;
-	float rotor_track_comb_amplitude;
-} RotorTrackingState;
-
 typedef struct AppControlContext {
 	SensorRaw core_hw_raw;
 	SensorCalib core_hw_cal;
@@ -164,19 +112,13 @@ typedef struct AppControlContext {
 	SessionInitialParams init_params;
 	LoopTimingState timing;
 	RotorFilterState lpf;
-	RotorPlantState plant;
-	RotorTrackingState tracking;
 	RotorPositionState rotor_pos;
 	EncoderCalibState enc_cal;
 	PidGainSet gains;
 	ControllerDualPidRuntime core_dual_pid_runtime;
 	float angle_scale;
 	float adjust_increment;
-	int   enable_high_speed_sampling;
 	int   reset_state;
-	int   report_mode;
-	int   speed_scale;
-	int   speed_governor;
 	int   mode_transition_state;
 	int   select_suspended_mode;
 	int   enable_swing_up;

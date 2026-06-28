@@ -2,6 +2,7 @@
 #include "edukit_system.h"
 #include "hardware.h"
 #include "ui.h"
+#include "remote_controller.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -91,11 +92,15 @@ static int rotor_test_acceleration_max, swing_deceleration_max;
 static uint16_t current_speed;
 static int enable_pendulum_sysid_test;
 static int enable_full_sysid;
-static float full_sysid_max_freq_hz;
 static int enable_encoder_test;
 static int motor_state;
 static float rotor_chirp_amplitude;
 static int rotor_chirp_step_period;
+static float rotor_chirp_start_freq;
+static float rotor_chirp_end_freq;
+static float rotor_chirp_period;
+static float chirp_time;
+static float rotor_chirp_frequency;
 static uint32_t RxBuffer_ReadIdx;
 static uint32_t RxBuffer_WriteIdx;
 static uint32_t readBytes;
@@ -148,28 +153,6 @@ static void read_int(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx ,
 	}
 }
 
-static void read_char(uint32_t * RxBuffer_ReadIdx, uint32_t * RxBuffer_WriteIdx , uint32_t * readBytes, char * char_return) {
-
-	int k;
-
-	while (1) {
-		*RxBuffer_WriteIdx = UART_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
-		*readBytes = Extract_Msg(RxBuffer, *RxBuffer_ReadIdx, *RxBuffer_WriteIdx, UART_RX_BUFFER_SIZE, &Msg);
-
-		if (*readBytes)
-		{
-			*RxBuffer_ReadIdx = (*RxBuffer_ReadIdx + *readBytes)
-											% UART_RX_BUFFER_SIZE;
-			char_return = (char*)(Msg.Data);
-			for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
-				Msg.Data[k] = 0;
-			}
-			*readBytes = 0;
-			break;
-		}
-		HAL_Delay(100);
-	}
-}
 
 int mode_index_identification(AppControlContext *ctx, char * user_config_input, int config_command_control,
 		float *adjust_increment, arm_pid_instance_a_f32 *PID_Pend,
@@ -309,28 +292,8 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		PID_Rotor->Kd = SECONDARY_DERIVATIVE_MODE_5;
 		ctx->enable_adaptive_mode = 0;
 		config_command = 1;
-	} else if (strcmp(user_config_input, mode_string_enable_step ) == 0 ){
-		ctx->tracking.enable_rotor_position_step_response_cycle = 1;
-		ctx->gains.enable_sensitivity_fnc_step = 0;
-		ctx->gains.enable_noise_rejection_step = 0;
-		ctx->gains.enable_disturbance_rejection_step = 0;
-		config_command = 1;
-	} else if (strcmp(user_config_input, mode_string_disable_step ) == 0 ){
-		ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-		config_command = 1;
-	} else if (strcmp(user_config_input, mode_string_enable_pendulum_impulse) == 0 ){
-		ctx->tracking.enable_pendulum_position_impulse_response_cycle = 1;
-		ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-		ctx->gains.enable_sensitivity_fnc_step = 0;
-		ctx->gains.enable_noise_rejection_step = 0;
-		ctx->gains.enable_disturbance_rejection_step = 0;
-		config_command = 1;
-	} else if (strcmp(user_config_input, mode_string_disable_pendulum_impulse ) == 0 ){
-		ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_noise_rej_step ) == 0 ){
 		ctx->gains.enable_noise_rejection_step = 1;
-		ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 		ctx->gains.enable_disturbance_rejection_step = 0;
 		ctx->gains.enable_sensitivity_fnc_step = 0;
 		config_command = 1;
@@ -340,7 +303,6 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_sensitivity_fnc_step ) == 0 ){
 		ctx->gains.enable_sensitivity_fnc_step = 1;
-		ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 		ctx->gains.enable_disturbance_rejection_step = 0;
 		ctx->gains.enable_noise_rejection_step = 0;
 		config_command = 1;
@@ -349,7 +311,6 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_load_dist ) == 0 ){
 		ctx->gains.enable_sensitivity_fnc_step = 0;
-		ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 		ctx->gains.enable_disturbance_rejection_step = 1;
 		ctx->gains.enable_noise_rejection_step = 0;
 		config_command = 1;
@@ -375,36 +336,19 @@ int mode_index_identification(AppControlContext *ctx, char * user_config_input, 
 		else if (step_size == 4) { *adjust_increment = 100;}
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_high_speed_sampling ) == 0 ){
-		ctx->enable_high_speed_sampling = 1;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_high_speed_sampling ) == 0 ){
-		ctx->enable_high_speed_sampling = 0;
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_enable_speed_prescale ) == 0 ){
-		/* enable_speed_prescale was write-only; keep config_command to acknowledge the command */
 		config_command = 1;
 	} else if (strcmp(user_config_input, mode_string_disable_speed_prescale ) == 0 ){
 		config_command = 1;
 	} else if  (strcmp(user_config_input, mode_string_disable_speed_governor ) == 0 ){
-		ctx->speed_governor = 0;
 		config_command = 1;
 	} else if  (strcmp(user_config_input, mode_string_enable_speed_governor ) == 0 ){
-		ctx->speed_governor = 1;
 		config_command = 1;
 	} else {
 		mode_index_command = atoi((char*) Msg.Data);
-	}
-	if (mode_index_command == mode_9){
-		ctx->tracking.disable_mod_sin_rotor_tracking = 1;
-		ctx->tracking.sine_drive_transition = 1;
-		mode_index_command = -1;
-	}
-	if (config_command_control == 0){
-		if (mode_index_command == mode_5){
-			ctx->tracking.disable_mod_sin_rotor_tracking = 0;
-			ctx->tracking.sine_drive_transition = 1;
-			mode_index_command = -1;
-		}
 	}
 	return mode_index_command;
 }
@@ -561,17 +505,27 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 		return 1;
 	}
 
+	/* Multi-byte commands: "r <steps>" (Mode A reference) or "u <steps/s^2>" (Mode B control) */
+	if (readBytes >= 3 && Msg.Len >= 2) {
+		RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
+		char cmd = ((char *)Msg.Data)[0];
+		if (((char *)Msg.Data)[1] == ' ') {
+			float val = strtof((char *)Msg.Data + 2, NULL);
+			if (cmd == 'r') {
+				ctx->rotor_pos.rotor_position_command_steps = val;
+			} else if (cmd == 'u') {
+				remote_controller_set_u(val);
+			}
+		}
+	}
+
 	if (readBytes == 2 && Msg.Len == 1 && cycle_index % 10 == 0) {
 		RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
 		ctx->mode_transition_state = 1;
 		mode_index_command = mode_index_identification(ctx, (char *) Msg.Data, config_command,
 				&ctx->adjust_increment, PID_Pend, PID_Rotor);
 		strcpy(config_message, (char *) Msg.Data);
-		if (strcmp(config_message, ">") == 0) {
-			if (enable_full_sysid && ctx->tracking.full_sysid_start_index == -1) {
-				ctx->tracking.full_sysid_start_index = cycle_index + 50;
-			}
-		} else if (strcmp(config_message, "q") == 0) {
+		if (strcmp(config_message, "q") == 0) {
 			const char *exit_msg = "\n\rExit Control Loop Command Received ";
 			HAL_UART_Transmit(&huart2, (uint8_t*) exit_msg, strlen(exit_msg), HAL_MAX_DELAY);
 			return -1;
@@ -602,6 +556,10 @@ int ui_process_runtime_input(int cycle_index, AppControlContext *ctx,
 
 void user_prompt(void){
 	sprintf(uart_tx_buf, "\n\r********  System Start Mode Selections  ********\n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Enter 'A' at prompt for Mode A: Inverted Pendulum PID, PC sends 'r <steps>'.. \n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Enter 'B' at prompt for Mode B: PC computes control, sends 'u <steps/s^2>'.. \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 1 at prompt for Inverted Pendulum Control............................... \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
@@ -722,8 +680,6 @@ void user_configuration(AppControlContext *ctx){
 	ctx->enable_motor_actuator_characterization_mode = 0;
 	enable_full_sysid = 0;
 
-	ctx->tracking.enable_rotor_tracking_comb_signal = 0;
-	ctx->tracking.rotor_track_comb_amplitude = 0;
 	ctx->gains.enable_disturbance_rejection_step = 0;
 	ctx->gains.enable_noise_rejection_step = 0;
 	ctx->gains.enable_sensitivity_fnc_step = 0;
@@ -755,12 +711,6 @@ void user_configuration(AppControlContext *ctx){
 			ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 			ctx->max_speed = 		MAX_SPEED_MODE_1;
 			ctx->min_speed = 		MIN_SPEED_MODE_1;
-			ctx->plant.enable_rotor_plant_design = 0;
-			ctx->plant.enable_rotor_plant_gain_design = 0;
-			ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-			ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-			ctx->tracking.enable_rotor_chirp = 0;
-			ctx->tracking.enable_mod_sin_rotor_tracking = 1;
 			ctx->enc_cal.enable_angle_cal = 1;
 			ctx->enable_swing_up = 1;
 			L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
@@ -778,24 +728,49 @@ void user_configuration(AppControlContext *ctx){
 			sprintf(uart_tx_buf, "%s", (char*)Msg.Data);
 			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
+			{
+				char sel = ((char *)Msg.Data)[0];
+				if (sel == 'A' || sel == 'B') {
+					ctx->core_controller_ops = (sel == 'B') ? &CONTROLLER_OPS_REMOTE
+					                                        : &CONTROLLER_OPS_DEFAULT;
+					ctx->gains.enable_state_feedback = 1;
+					ctx->select_suspended_mode = 0;
+					ctx->enc_cal.enable_angle_cal = 1;
+					ctx->enable_swing_up = 1;
+					ctx->gains.proportional =   PRIMARY_PROPORTIONAL_MODE_1;
+					ctx->gains.integral =       PRIMARY_INTEGRAL_MODE_1;
+					ctx->gains.derivative =     PRIMARY_DERIVATIVE_MODE_1;
+					ctx->gains.rotor_p_gain =   SECONDARY_PROPORTIONAL_MODE_1;
+					ctx->gains.rotor_i_gain =   SECONDARY_INTEGRAL_MODE_1;
+					ctx->gains.rotor_d_gain =   SECONDARY_DERIVATIVE_MODE_1;
+					ctx->gains.integral_compensator_gain = 0;
+					ctx->gains.feedforward_gain = 1;
+					ctx->max_speed = MAX_SPEED_MODE_1;
+					ctx->min_speed = MIN_SPEED_MODE_1;
+					L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
+					if (sel == 'A') {
+						sprintf(uart_tx_buf,
+							"\n\rMode A: Inverted Pendulum PID. During run: 'r <steps>' sets rotor reference.\r\n");
+					} else {
+						sprintf(uart_tx_buf,
+							"\n\rMode B: Remote Control. During run: 'u <steps/s^2>' sets control output.\r\n");
+					}
+					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+					break;
+				}
+			}
+
 			get_user_mode_index((char*)Msg.Data, &char_mode_select, &mode_index);
 
 			/*
 			 * Configure Motor Speed Profile and PID Controller Gains
 			 */
 
-			ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-			ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-			ctx->tracking.enable_rotor_chirp = 0;
-			ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
 			enable_pendulum_sysid_test = 0;
 			enable_full_sysid = 0;
-			ctx->tracking.enable_rotor_tracking_comb_signal = 0;
 			ctx->gains.enable_disturbance_rejection_step = 0;
 			ctx->gains.enable_noise_rejection_step = 0;
 			ctx->gains.enable_sensitivity_fnc_step = 0;
-			ctx->plant.enable_rotor_plant_design = 0;
-			ctx->plant.enable_rotor_plant_gain_design = 0;
 
 
 			switch (mode_index) {
@@ -816,16 +791,9 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 				ctx->max_speed = 		MAX_SPEED_MODE_1;
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
 
 				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-				ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				ctx->tracking.enable_rotor_chirp = 0;
 
 				sprintf(uart_tx_buf, "\n\rMode %i Configured\n\r", mode_index);
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
@@ -864,84 +832,6 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable.........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Tracking Comb Signal; 0 to Disable................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_tracking_comb_signal);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_tracking_comb_signal);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_tracking_comb_signal < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->tracking.enable_rotor_tracking_comb_signal == 1){
-						ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				}
-
-				if (ctx->tracking.enable_rotor_tracking_comb_signal == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				}
-
 				break;
 
 				/* Mode 3 selection */
@@ -960,11 +850,7 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_2;
 				ctx->max_speed = 		MAX_SPEED_MODE_2;
 				ctx->min_speed = 		MIN_SPEED_MODE_2;
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
 
-				ctx->tracking.enable_mod_sin_rotor_tracking = ENABLE_MOD_SIN_ROTOR_TRACKING;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
 				sprintf(uart_tx_buf, "\n\rMode %i Configured", mode_index);
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
@@ -988,84 +874,6 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-
-
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable.........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
-				if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Tracking Comb Signal; 0 to Disable................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_tracking_comb_signal);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_tracking_comb_signal);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_tracking_comb_signal < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->tracking.enable_rotor_tracking_comb_signal == 1){
-						ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-					sprintf(uart_tx_buf, "\n\rRotor Step Drive enabled ");
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-					sprintf(uart_tx_buf, "\n\rRotor Sine Drive enabled ");
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					sprintf(uart_tx_buf, "\n\rRotor Chirp Drive enabled ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
 				break;
 
 				/* Mode 4 selection */
@@ -1084,11 +892,7 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_3;
 				ctx->max_speed = 		MAX_SPEED_MODE_3;
 				ctx->min_speed = 		MIN_SPEED_MODE_3;
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
 
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
 				sprintf(uart_tx_buf, "\n\rMode %i Configured", mode_index);
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
@@ -1129,76 +933,6 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable.........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart**************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable..................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Tracking Comb Signal; 0 to Disable................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_tracking_comb_signal);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_tracking_comb_signal);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_tracking_comb_signal < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->tracking.enable_rotor_tracking_comb_signal == 1){
-						ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
 				break;
 
 				/* Mode 2 Suspended Mode selection */
@@ -1216,11 +950,7 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_4;
 				ctx->max_speed = 		MAX_SPEED_MODE_1;
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
 
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
 				sprintf(uart_tx_buf, "\n\rMode %i Configured", mode_index);
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
@@ -1245,82 +975,6 @@ void user_configuration(AppControlContext *ctx){
 				}
 
 
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable.........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Tracking Comb Signal; 0 to Disable................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_tracking_comb_signal);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_tracking_comb_signal);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_tracking_comb_signal < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->tracking.enable_rotor_tracking_comb_signal == 1){
-						ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-					sprintf(uart_tx_buf, "\n\rRotor Step Drive enabled ");
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-					sprintf(uart_tx_buf, "\n\rRotor Sine Drive enabled ");
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					sprintf(uart_tx_buf, "\n\rRotor Chirp Drive enabled ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				}
 				break;
 
 
@@ -1546,11 +1200,6 @@ void user_configuration(AppControlContext *ctx){
 					ctx->enc_cal.enable_angle_cal = 0;
 				}
 
-				ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_chirp = 0;
-
 				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
@@ -1588,98 +1237,6 @@ void user_configuration(AppControlContext *ctx){
 					}
 				}
 
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable.........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable................................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Tracking Comb Signal; 0 to Disable................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_tracking_comb_signal);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_tracking_comb_signal);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_tracking_comb_signal < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->tracking.enable_rotor_tracking_comb_signal == 1){
-						ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-					}
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0 && ctx->tracking.enable_rotor_position_step_response_cycle == 0
-						&& ctx->tracking.enable_mod_sin_rotor_tracking == 0 && ctx->tracking.enable_rotor_tracking_comb_signal == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Pendulum Impulse Signal; 0 to Disable...................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_pendulum_position_impulse_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_pendulum_position_impulse_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_pendulum_position_impulse_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1) {
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				}
-
-				if (ctx->tracking.enable_rotor_tracking_comb_signal == 1) {
-					ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-					ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				}
-
 				ctx->gains.enable_disturbance_rejection_step = 0;
 				ctx->gains.enable_noise_rejection_step = 0;
 				ctx->gains.enable_sensitivity_fnc_step = 0;
@@ -1697,7 +1254,6 @@ void user_configuration(AppControlContext *ctx){
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 				if (ctx->gains.enable_disturbance_rejection_step == 1) {
 					ctx->gains.enable_sensitivity_fnc_step = 0;
-					ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 					ctx->gains.enable_noise_rejection_step = 0;
 				}
 
@@ -1717,7 +1273,6 @@ void user_configuration(AppControlContext *ctx){
 					}
 					if (ctx->gains.enable_noise_rejection_step == 1) {
 						ctx->gains.enable_sensitivity_fnc_step = 0;
-						ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 						ctx->gains.enable_disturbance_rejection_step = 0;
 					}
 				}
@@ -1735,7 +1290,6 @@ void user_configuration(AppControlContext *ctx){
 						NVIC_SystemReset();
 					}
 					if (ctx->gains.enable_sensitivity_fnc_step == 1) {
-						ctx->tracking.enable_rotor_position_step_response_cycle = 1;
 						ctx->gains.enable_disturbance_rejection_step = 0;
 						ctx->gains.enable_noise_rejection_step = 0;
 					}
@@ -1754,20 +1308,6 @@ void user_configuration(AppControlContext *ctx){
 					ctx->gains.rotor_d_gain = 	-ctx->gains.rotor_d_gain;
 					ctx->gains.integral_compensator_gain = -ctx->gains.integral_compensator_gain;
 				}
-
-				/*
-				 * Rotor Plant Design is enabled for selection of Full State
-				 * Feedback and Integral Action
-				 */
-
-
-				ctx->plant.select_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
-
-				/*
-				 * Optional addition of second order rotor plant gain specification
-				 */
 
 				/*
 
@@ -1845,159 +1385,6 @@ void user_configuration(AppControlContext *ctx){
 
 				*/
 
-
-
-				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->plant.enable_rotor_plant_design == 0 && ctx->gains.enable_state_feedback == 1){
-
-					/* Optional addition of transfer function design
-					sprintf(uart_tx_buf, "\n\rEnter 1 for Rotor Plant Design Grotor = Wn/(s^3 + Wn*s^2): ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.select_rotor_plant_design);
-					sprintf(uart_tx_buf, "%i", ctx->plant.select_rotor_plant_design);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if (ctx->plant.select_rotor_plant_design == 1) {
-						ctx->plant.enable_rotor_plant_design = 3;
-					}
-					 */
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 for Rotor Plant Design Grotor = 1/(s^2 + Wn*s) ...................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.select_rotor_plant_design);
-					sprintf(uart_tx_buf, "%i", ctx->plant.select_rotor_plant_design);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->plant.select_rotor_plant_design < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-					/* Configure trotor plant design Grotor = 1/(s^2 + Wn*s) with identifier 2 */
-					if (ctx->plant.select_rotor_plant_design == 1) {
-						ctx->plant.enable_rotor_plant_design = 2;
-					}
-
-
-					if (ctx->plant.enable_rotor_plant_design == 2 || ctx->plant.enable_rotor_plant_design == 3) {
-						if (ctx->select_suspended_mode == 1){
-							sprintf(uart_tx_buf, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
-							if ( ctx->plant.Wo_r < 0 ){
-								sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-								HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-								HAL_Delay(3000);
-								NVIC_SystemReset();
-							}
-							if (ctx->plant.Wo_r > 10){
-								ctx->plant.Wo_r = 10;
-							}
-							if (ctx->plant.Wo_r < 0.0){
-								ctx->plant.Wo_r = 0.0;
-							}
-
-							ctx->plant.rotor_plant_gain = 1;
-							sprintf(uart_tx_buf, "%0.2f", ctx->plant.Wo_r);
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						}
-
-
-						if (ctx->select_suspended_mode == 0){
-							sprintf(uart_tx_buf, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
-							if ( ctx->plant.Wo_r < 0 ){
-								sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-								HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-								HAL_Delay(3000);
-								NVIC_SystemReset();
-							}
-							if (ctx->plant.Wo_r > 10){
-								ctx->plant.Wo_r = 10;
-							}
-							if (ctx->plant.Wo_r < 0){
-								ctx->plant.Wo_r = 0;
-							}
-							ctx->plant.rotor_plant_gain = 1;
-							sprintf(uart_tx_buf, "%0.2f", ctx->plant.Wo_r);
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						}
-					}
-				}
-
-
-
-				if (ctx->plant.enable_rotor_plant_gain_design == 0 && ctx->gains.enable_state_feedback == 0){
-
-					/* Optional addition of transfer function design
-					sprintf(uart_tx_buf, "\n\rEnter 1 for Rotor Plant Design Grotor = Wn/(s^3 + Wn*s^2): ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.select_rotor_plant_design);
-					sprintf(uart_tx_buf, "%i", ctx->plant.select_rotor_plant_design);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					ctx->plant.enable_rotor_plant_design = 3;
-					 */
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 for Rotor Plant Design Grotor = 1/(s^2 + Wn*s) ...................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.select_rotor_plant_design);
-					sprintf(uart_tx_buf, "%i", ctx->plant.select_rotor_plant_design);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					/* Configure trotor plant design Grotor = 1/(s^2 + Wn*s) with identifier 2 */
-					if (ctx->plant.select_rotor_plant_design == 1) {
-						ctx->plant.enable_rotor_plant_design = 2;
-					}
-					if ( ctx->plant.select_rotor_plant_design < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					if (ctx->plant.enable_rotor_plant_design == 2 || ctx->plant.enable_rotor_plant_design == 3) {
-						if (ctx->select_suspended_mode == 1){
-							sprintf(uart_tx_buf, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
-							if ( ctx->plant.Wo_r < 0 ){
-								sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-								HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-								HAL_Delay(3000);
-								NVIC_SystemReset();
-							}
-							if (ctx->plant.Wo_r > 10){
-								ctx->plant.Wo_r = 10;
-							}
-							if (ctx->plant.Wo_r < 0){
-								ctx->plant.Wo_r = 0;
-							}
-							ctx->plant.rotor_plant_gain = 1;
-							sprintf(uart_tx_buf, "%0.2f", ctx->plant.Wo_r);
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						}
-
-
-						if (ctx->select_suspended_mode == 0){
-							sprintf(uart_tx_buf, "\n\rEnter Wn Frequency (rad/sec) of Minimum 0 and Maximum 10 .................: ");
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-							read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->plant.Wo_r);
-							if ( ctx->plant.Wo_r < 0 ){
-								sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-								HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-								HAL_Delay(3000);
-								NVIC_SystemReset();
-							}
-							if (ctx->plant.Wo_r > 10){
-								ctx->plant.Wo_r = 10;
-							}
-							if (ctx->plant.Wo_r < 0){
-								ctx->plant.Wo_r = 0;
-							}
-							ctx->plant.rotor_plant_gain = 1;
-							sprintf(uart_tx_buf, "%0.2f", ctx->plant.Wo_r);
-							HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						}
-					}
-				}
 
 
 				ctx->torq_current_val = MAX_TORQUE_CONFIG;
@@ -2101,12 +1488,6 @@ void user_configuration(AppControlContext *ctx){
 
 				ctx->select_suspended_mode = 0;
 
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_chirp = 0;
-
-				ctx->plant.enable_rotor_plant_design = 0;
-				ctx->plant.enable_rotor_plant_gain_design = 0;
 				ctx->enc_cal.enable_angle_cal = 0;
 
 				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable ..............: ");
@@ -2142,67 +1523,6 @@ void user_configuration(AppControlContext *ctx){
 					NVIC_SystemReset();
 				}
 
-
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Rotor Chirp Drive; 0 to Disable ....................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_rotor_chirp);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_chirp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_rotor_chirp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_chirp == 0){
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Step Drive; 0 to Disable ...........................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.enable_rotor_position_step_response_cycle);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_rotor_position_step_response_cycle);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_rotor_position_step_response_cycle < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-
-					sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Sine Drive; 0 to Disable ...........................: ");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_mod_sin_rotor_tracking);
-					sprintf(uart_tx_buf, "%i", ctx->tracking.enable_mod_sin_rotor_tracking);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					if ( ctx->tracking.enable_mod_sin_rotor_tracking < 0 ){
-						sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-						HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-						HAL_Delay(3000);
-						NVIC_SystemReset();
-					}
-				}
-
-				sprintf(uart_tx_buf, "\n\rEnter 1 to Enable Pendulum Impulse; 0 to Disable .........................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.enable_pendulum_position_impulse_response_cycle);
-				sprintf(uart_tx_buf, "%i", ctx->tracking.enable_pendulum_position_impulse_response_cycle);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( ctx->tracking.enable_pendulum_position_impulse_response_cycle < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				if (ctx->tracking.enable_rotor_position_step_response_cycle == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_mod_sin_rotor_tracking == 1) {
-					ctx->tracking.enable_pendulum_position_impulse_response_cycle = 0;
-				}
-
-				if (ctx->tracking.enable_pendulum_position_impulse_response_cycle == 1) {
-				}
 
 				/*
 				 * Reverse polarity of gain values to account for suspended mode angle configuration
@@ -2252,9 +1572,9 @@ void user_configuration(AppControlContext *ctx){
 				swing_deceleration_max = 3000;
 				ctx->torq_current_val = MAX_TORQUE_CONFIG;
 				rotor_chirp_amplitude = 5;
-				ctx->tracking.rotor_chirp_start_freq = 0.05;
-				ctx->tracking.rotor_chirp_end_freq = 5;
-				ctx->tracking.rotor_chirp_period = 40;
+				rotor_chirp_start_freq = 0.05f;
+				rotor_chirp_end_freq = 5.0f;
+				rotor_chirp_period = 40.0f;
 
 				break;
 
@@ -2273,120 +1593,7 @@ void user_configuration(AppControlContext *ctx){
 						strlen(uart_tx_buf), HAL_MAX_DELAY);
 				break;
 
-				/* Rotor tracking comb signal */
-			case 16:
-				ctx->tracking.enable_rotor_tracking_comb_signal = 1;
-				ctx->tracking.rotor_track_comb_amplitude = ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE * STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE;
-				sprintf(uart_tx_buf, "\n\rLoad Disturbance Sensitivity Spectrum Analyzer Enabled");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf), HAL_MAX_DELAY);
-				break;
-
-				/* Full system identification mode */
-			case 19:
-				enable_full_sysid = 1;
-
-				ctx->select_suspended_mode = 1;
-				ctx->gains.proportional = 0;
-				ctx->gains.integral = 0;
-				ctx->gains.derivative = 0;
-				ctx->gains.rotor_p_gain = 0;
-				ctx->gains.rotor_i_gain = 0;
-				ctx->gains.rotor_d_gain = 0;
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-				ctx->tracking.enable_rotor_chirp = 0;
-				ctx->tracking.enable_rotor_tracking_comb_signal = 0;
-
-				ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s = 0;
-				ctx->tracking.full_sysid_min_freq_hz = 0;
-				full_sysid_max_freq_hz = 0;
-				ctx->tracking.full_sysid_num_freqs = 0;
-
-				sprintf(uart_tx_buf, "\n\r *** Starting Suspended Mode System Identification (using frequency \"comb\") ***\n\r ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rEnter maximum velocity amplitude in deg/s (default 150 Hz maximum 150 deg/s): ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s);
-				if (ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s == 0) {
-					ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s = 150;
-				}
-				if (ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s >= 150) {
-					ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s = 150;
-				}
-				sprintf(uart_tx_buf, "%.02f", ctx->tracking.full_sysid_max_vel_amplitude_deg_per_s);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rEnter minimum frequency for input signal in Hz (default 0.2 Hz maximum 20 Hz): ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &ctx->tracking.full_sysid_min_freq_hz);
-				if (ctx->tracking.full_sysid_min_freq_hz == 0) {
-					ctx->tracking.full_sysid_min_freq_hz = 0.2;
-				}
-				if (ctx->tracking.full_sysid_min_freq_hz > 20) {
-					ctx->tracking.full_sysid_min_freq_hz = 20;
-				}
-				sprintf(uart_tx_buf, "%.02f", ctx->tracking.full_sysid_min_freq_hz);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rEnter maximum frequency for input signal in Hz (default 5 Hz maximum 20 Hz): ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_float(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, &full_sysid_max_freq_hz);
-				if (full_sysid_max_freq_hz == 0) {
-					full_sysid_max_freq_hz = 5;
-				}
-				if (full_sysid_max_freq_hz > 20) {
-					full_sysid_max_freq_hz = 20;
-				}
-				sprintf(uart_tx_buf, "%.02f", full_sysid_max_freq_hz);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\rEnter the number of frequency steps (default 11 maximum 20): ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &ctx->tracking.full_sysid_num_freqs);
-				if (ctx->tracking.full_sysid_num_freqs == 0) {
-					ctx->tracking.full_sysid_num_freqs = 11;
-				}
-				if (ctx->tracking.full_sysid_num_freqs > 20) {
-					ctx->tracking.full_sysid_num_freqs = 20;
-				}
-				sprintf(uart_tx_buf, "%i", ctx->tracking.full_sysid_num_freqs);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				ctx->tracking.full_sysid_freq_log_step = powf(full_sysid_max_freq_hz/ctx->tracking.full_sysid_min_freq_hz, 1.0f/(ctx->tracking.full_sysid_num_freqs-1));
-
-				sprintf(uart_tx_buf, "\n\rGenerating a comb with %d frequencies, using log step multiplier %f.\n\r", ctx->tracking.full_sysid_num_freqs, ctx->tracking.full_sysid_freq_log_step);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				sprintf(uart_tx_buf, "List of frequencies (Hz):\n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				float f = ctx->tracking.full_sysid_min_freq_hz;
-				for (int i = 0; i < ctx->tracking.full_sysid_num_freqs; i++) {
-					sprintf(uart_tx_buf, "%.02f\t", f);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					f *= ctx->tracking.full_sysid_freq_log_step;
-				}
-				sprintf(uart_tx_buf, "\n\rList of frequencies (rad/s):\n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				f = ctx->tracking.full_sysid_min_freq_hz * M_TWOPI;
-				for (int i = 0; i < ctx->tracking.full_sysid_num_freqs; i++) {
-					sprintf(uart_tx_buf, "%.02f\t", f);
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					f *= ctx->tracking.full_sysid_freq_log_step;
-				}
-
-				sprintf(uart_tx_buf, "\n\rThe input signal will start when \"Log Data\" is activated from the Real-Time Workbench. "
-						"Alternatively, enter '>' and hit return once system starts.\n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf), HAL_MAX_DELAY);
-				sprintf(uart_tx_buf, "\n\rPress enter to proceed");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_char(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx , &readBytes, NULL);
-				sprintf(uart_tx_buf, "\n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				break;
-
-				/* Default start mode */
+			/* Default start mode */
 			default:
 
 				ctx->gains.enable_state_feedback = 0;
@@ -2399,8 +1606,6 @@ void user_configuration(AppControlContext *ctx){
 				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
 				ctx->max_speed = 		MAX_SPEED_MODE_1;
 				ctx->min_speed = 		MIN_SPEED_MODE_1;
-				ctx->tracking.enable_rotor_position_step_response_cycle = 0;
-				ctx->tracking.enable_mod_sin_rotor_tracking = 0;
 				ctx->enc_cal.enable_angle_cal = 1;
 				L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
 				sprintf(uart_tx_buf, "\n\rDefault Mode 1 Configured");
@@ -2625,7 +1830,7 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 	hardware_rotor_home();
 	/* test_time was write-only, removed */
 
-	rotor_chirp_step_period = (int) (ctx->tracking.rotor_chirp_period * 240.0);
+	rotor_chirp_step_period = (int) (rotor_chirp_period * 240.0);
 	ctx->timing.tick_cycle_start = HAL_GetTick();
 	mode_index_command = 1;
 	mode_index = 1;
@@ -2803,9 +2008,9 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 			ctx->timing.tick = HAL_GetTick();
 			ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_current;
 			ctx->timing.tick_cycle_current = ctx->timing.tick;
-			ctx->tracking.chirp_time = (float) (i) / 400;
-			ctx->tracking.rotor_chirp_frequency = ctx->tracking.rotor_chirp_start_freq
-					+ (ctx->tracking.rotor_chirp_end_freq - ctx->tracking.rotor_chirp_start_freq)
+			chirp_time = (float) (i) / 400;
+			rotor_chirp_frequency = rotor_chirp_start_freq
+					+ (rotor_chirp_end_freq - rotor_chirp_start_freq)
 					* (float) (i) / rotor_chirp_step_period;
 
 			if (mode_index == 1) {
@@ -2814,14 +2019,14 @@ void motor_actuator_characterization_mode(AppControlContext *ctx){
 						* (float) (STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE)
 						* sin(
 								2.0 * 3.14159
-								* ctx->tracking.rotor_chirp_frequency
-								* ctx->tracking.chirp_time);
+								* rotor_chirp_frequency
+								* chirp_time);
 			}
 
 			if (mode_index == 2) {
 				if (sin(
-						2.0 * 3.14159 * ctx->tracking.rotor_chirp_frequency
-						* ctx->tracking.chirp_time) < 0) {
+						2.0 * 3.14159 * rotor_chirp_frequency
+						* chirp_time) < 0) {
 					k = -1;
 				} else {
 					k = 1;

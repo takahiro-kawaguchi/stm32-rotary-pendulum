@@ -86,31 +86,6 @@ void app_prepare_control_session(AppControlContext *ctx)
 
 	app_assign_pid_gains_from_user(ctx);
 	ctx->gains.integral_compensator_gain *= CONTROLLER_GAIN_SCALE;
-
-	if (ctx->plant.rotor_damping_coefficient != 0 || ctx->plant.rotor_natural_frequency != 0) {
-		ctx->plant.Wn2 = ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency;
-		ctx->plant.rotor_plant_gain = ctx->plant.rotor_plant_gain * ctx->plant.Wn2;
-		ctx->plant.ao = ((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)
-				+ (2.0F / ctx->timing.t_sample_s) * 2.0F * ctx->plant.rotor_damping_coefficient
-						* ctx->plant.rotor_natural_frequency
-				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency);
-		ctx->plant.c0 = ((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s) / ctx->plant.ao);
-		ctx->plant.c1 = -2.0F * ctx->plant.c0;
-		ctx->plant.c2 = ctx->plant.c0;
-		ctx->plant.c3 = -(2.0F * ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency
-				- 2.0F * (2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)) / ctx->plant.ao;
-		ctx->plant.c4 = -((2.0F / ctx->timing.t_sample_s) * (2.0F / ctx->timing.t_sample_s)
-				- (2.0F / ctx->timing.t_sample_s) * 2.0F * ctx->plant.rotor_damping_coefficient
-						* ctx->plant.rotor_natural_frequency
-				+ ctx->plant.rotor_natural_frequency * ctx->plant.rotor_natural_frequency) / ctx->plant.ao;
-	}
-
-	if (ctx->plant.enable_rotor_plant_design == 2) {
-		ctx->plant.IWon_r = 2 / (ctx->plant.Wo_r * ctx->timing.t_sample_s);
-		ctx->plant.iir_0_r = 1 - (1 / (1 + ctx->plant.IWon_r));
-		ctx->plant.iir_1_r = -ctx->plant.iir_0_r;
-		ctx->plant.iir_2_r = (1 / (1 + ctx->plant.IWon_r)) * (1 - ctx->plant.IWon_r);
-	}
 }
 
 void app_run_control_session(AppControlContext *ctx)
@@ -307,30 +282,16 @@ static void app_session_init_state(AppControlContext *ctx)
 	ctx->rotor_pos.rotor_position_diff_prev = 0;
 	ctx->rotor_pos.rotor_position_diff_filter = 0;
 	ctx->rotor_pos.rotor_position_diff_filter_prev = 0;
-	ctx->rotor_pos.rotor_position_step_polarity = 1;
 	ctx->enc_cal.encoder_angle_slope_corr_steps = 0;
-	ctx->tracking.rotor_sine_drive = 0;
-	ctx->tracking.sine_drive_transition = 0;
-	ctx->tracking.rotor_mod_control = 1.0;
 	ctx->enable_adaptive_mode = 0;
 	ctx->timing.tick_cycle_start = HAL_GetTick();
 	ctx->timing.tick_cycle_previous = ctx->timing.tick_cycle_start;
 	ctx->timing.tick_cycle_current = ctx->timing.tick_cycle_start;
 	ctx->timing.enable_cycle_delay_warning = ENABLE_CYCLE_DELAY_WARNING;
-	ctx->tracking.chirp_cycle = 0;
-	ctx->tracking.chirp_dwell_cycle = 0;
-	ctx->tracking.pendulum_position_command_steps = 0;
-	ctx->rotor_pos.impulse_start_index = 0;
 	ctx->mode_transition_state = 0;
 	ctx->adaptive_state = 4;
 	app_reset_command_shaper_state(ctx);
-	ctx->rotor_pos.rotor_position_command_steps_pf_prev = 0;
-	ctx->enable_high_speed_sampling = ENABLE_HIGH_SPEED_SAMPLING_MODE;
-	ctx->tracking.rotor_track_comb_command = 0;
-	ctx->tracking.full_sysid_start_index = -1;
 	ctx->timing.current_cpu_cycle = 0;
-	ctx->speed_scale = DATA_REPORT_SPEED_SCALE;
-	ctx->speed_governor = 0;
 	ctx->enc_cal.encoder_position_offset = 0;
 	ctx->enc_cal.encoder_position_offset_zero = 0;
 
@@ -355,8 +316,6 @@ static void app_session_init_state(AppControlContext *ctx)
 	ctx->init_params.enable_disturbance_rejection_step = ctx->gains.enable_disturbance_rejection_step;
 	ctx->init_params.enable_sensitivity_fnc_step     = ctx->gains.enable_sensitivity_fnc_step;
 	ctx->init_params.enable_noise_rejection_step     = ctx->gains.enable_noise_rejection_step;
-	ctx->init_params.enable_rotor_plant_design       = ctx->plant.enable_rotor_plant_design;
-	ctx->init_params.enable_rotor_plant_gain_design  = ctx->plant.enable_rotor_plant_gain_design;
 
 	if (ctx->select_suspended_mode == 1) {
 		ctx->gains.load_disturbance_sensitivity_scale = 1.0;
@@ -387,8 +346,6 @@ static void app_run_swing_up(AppControlContext *ctx)
 	ctx->gains.enable_disturbance_rejection_step = 0;
 	ctx->gains.enable_sensitivity_fnc_step = 0;
 	ctx->gains.enable_noise_rejection_step = 0;
-	ctx->plant.enable_rotor_plant_design = 0;
-	ctx->plant.enable_rotor_plant_gain_design = 0;
 
 	ctx->torq_current_val = MAX_TORQUE_SWING_UP;
 	L6474_SetAnalogValue(0, L6474_TVAL, ctx->torq_current_val);

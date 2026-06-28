@@ -87,9 +87,6 @@
 
 #define T_SAMPLE_DEFAULT 0.002
 
-#define ENABLE_HIGH_SPEED_SAMPLING_MODE 			0
-#define SAMPLE_BAUD_RATE							230400
-
 #define CONTROLLER_GAIN_SCALE 						1
 #define STEPPER_READ_POSITION_STEPS_PER_DEGREE 		8.888889	//	Stepper position read value in steps per degree
 #define STEPPER_CONTROL_POSITION_STEPS_PER_DEGREE 	STEPPER_READ_POSITION_STEPS_PER_DEGREE
@@ -268,7 +265,7 @@
  * host.
  */
 
-#define START_DEFAULT_MODE_TIME 5000			// 5 second delay to permit user input after system start
+#define START_DEFAULT_MODE_TIME 60000			// 15 second delay to permit user input after system start
 												// If no user response then set default values
 #define PENDULUM_ORIENTATION_START_DELAY 10000	// Time permitted to user to orient Pendulum vertical at start
 
@@ -323,39 +320,6 @@
 #define ENCODER_POSITION_NEGATIVE_LIMIT -120		// Minimum allowed rotation in negative angle in steps
 
 #define ENABLE_TORQUE_CURRENT_ENTRY		0		    // Enables user input of torque current configuration in general mode
-/*
- * Setting ENABLE_MOD_SIN_ROTOR_TRACKING to 1 enables a Rotor Position tracking command in the
- * form of an amplitude modulated sine wave signal
- * Frequency units and Rate are Hz
- * Amplitude units are steps
- *
- */
-
-#define ENABLE_MOD_SIN_ROTOR_TRACKING 1		// If selected, disable all other modulation inputs
-#define MOD_SIN_CARRIER_FREQ 0.15			// 0.15 default
-#define MOD_SIN_START_CYCLES 5000			// Sine modulation starts at completion of angle calibration if enabled
-#define MOD_SIN_AMPLITUDE 300				// 400 default
-#define MOD_SIN_MODULATION_FREQ  0.02		// 0.02 default
-#define MOD_SIN_MODULATION_MIN 0			// Default 0
-/* Define for High Speed System */
-#define MOD_SIN_SAMPLE_RATE (1/T_SAMPLE_DEFAULT)  // Equals system sample rate
-#define ENABLE_SIN_MOD 1					// 1 default
-
-#define ENABLE_ROTOR_CHIRP 0				// If selected, disable all other modulation inputs
-#define ROTOR_CHIRP_START_FREQ 0.01			// 0.001 default
-#define ROTOR_CHIRP_END_FREQ 15				// 5 default
-#define ROTOR_CHIRP_PERIOD 20000			// 20000 default
-#define ROTOR_CHIRP_SWEEP_DELAY 1000		// 0 default - enables control system to recover between sweeps
-/* Define for High Speed System */
-#define ROTOR_CHIRP_SAMPLE_RATE (1/T_SAMPLE_DEFAULT)  // Equals system sample rate
-#define ROTOR_CHIRP_START_CYCLES 			// 0 default
-#define ROTOR_CHIRP_STEP_AMPLITUDE 2  		// 0.3 default
-
-#define ENABLE_ROTOR_TRACK_COMB_SIGNAL 0				// If selected, disable all other modulation inputs
-#define ROTOR_TRACK_COMB_SIGNAL_SAMPLE_RATE 500.0		// 500.0 default for Low Speed
-#define ROTOR_TRACK_COMB_SIGNAL_START_CYCLES 0			// 0 default
-#define ROTOR_TRACK_COMB_SIGNAL_AMPLITUDE 5.0			// 0.05 default
-
 #define ENABLE_DISTURBANCE_REJECTION_STEP 	1
 #define LOAD_DISTURBANCE_SENSITIVITY_SCALE 	20			// Scale factor applied to increase measurement resolution for Load Disturbance Sensitivity Function
 
@@ -379,45 +343,6 @@
 
 #define ENABLE_ROTOR_ACTUATOR_TEST 0
 #define ROTOR_ACTUATOR_TEST_CYCLES 1
-
-/*
- * Setting ENABLE_ROTOR_POSITION_STEP_RESPONSE_CYCLE = 1 applies a Rotor Position tracking
- * command input step signal
- */
-
-#define ENABLE_ROTOR_POSITION_STEP_RESPONSE_CYCLE 1			// If selected, disable all other modulation inputs
-#define ROTOR_POSITION_STEP_RESPONSE_CYCLE_AMPLITUDE 20		// Default 8. Amplitude of step cycle. Note: Peak-to-Peak amplitude is double this value
-#define ROTOR_POSITION_STEP_RESPONSE_CYCLE_INTERVAL 16384 	// Default 10240
-#define STEP_RESPONSE_AMP_LIMIT_ENABLE 0					// Enables limit of Step Response if rotor amplitude exceeds limit
-															// Useful for protecting operation if summing step and sine drive
-#define STEP_RESPONSE_AMP_LIMIT 350							// Angle limit for Step Response action
-/*
- * Setting ENABLE_ROTOR_POSITION_IMPULSE_RESPONSE_CYCLE = 1 applies a Rotor Position tracking
- * command input impulse signal
- */
-#define ENABLE_ROTOR_POSITION_IMPULSE_RESPONSE_CYCLE 0			// If selected, disable all other modulation inputs
-#define ROTOR_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE 8		// Amplitude of impulse in degrees
-#define ROTOR_POSITION_IMPULSE_RESPONSE_CYCLE_PERIOD 500 		// Duration of impulse in cycles
-#define ROTOR_POSITION_IMPULSE_RESPONSE_CYCLE_INTERVAL 5000	    // Interval between impulse events in cycles
-/* Define for High Speed System */
-#define ROTOR_IMPULSE_SAMPLE_RATE (1/T_SAMPLE_DEFAULT)  		// Equals system sample rate							// Default sample rate
-/*
- * Setting ENABLE_PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE = 1 applies a Pendulum Position tracking
- * command input impulse signal
- */
-#define ENABLE_PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE 0		// If selected, disable all other modulation inputs
-#define PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_AMPLITUDE 500	// Amplitude of step cycle in steps equaling 75 degrees. Note: Peak-to-Peak amplitude is double this value
-#define PENDULUM_POSITION_IMPULSE_AMPLITUDE_SCALE 4				// Amplitude scaling of impulse for Suspended and Inverted Mode
-#define PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_PERIOD 2		// Duration of impulse in cycles
-#define PENDULUM_POSITION_IMPULSE_RESPONSE_CYCLE_INTERVAL 18000	// Interval between impulse events in cycles
-/* Define for High Speed System */
-#define PENDULUM_IMPULSE_SAMPLE_RATE (1/T_SAMPLE_DEFAULT)       // Equals system sample rate 						// Default sample rate
-
-/*
- * DATA_REPORT_SPEED_SCALE enables reduced data rate for bandwidth constrained data acquisition systems
- */
-
-#define DATA_REPORT_SPEED_SCALE 20
 
 /*
  * UART DMA definitions
