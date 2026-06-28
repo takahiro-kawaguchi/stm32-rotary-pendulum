@@ -15,19 +15,14 @@ static int mode_index = 1;
 static int char_mode_select;
 static int mode_interactive;
 static int step_size;
-static int mode_1, mode_2, mode_3, mode_4, mode_5;
-static int mode_adaptive_off, mode_adaptive;
-static int mode_8, mode_9, mode_10, mode_11, mode_13, mode_15;
-static int mode_16, mode_17, mode_18, mode_19;
+static int mode_1, mode_2;
+static int mode_8, mode_10, mode_11, mode_13, mode_15;
 static int mode_quit;
 
 static char mode_string_stop[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_1[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_2[UART_RX_BUFFER_SIZE];
-static char mode_string_mode_3[UART_RX_BUFFER_SIZE];
-static char mode_string_mode_4[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_8[UART_RX_BUFFER_SIZE];
-static char mode_string_mode_5[UART_RX_BUFFER_SIZE];
 static char mode_string_inc_accel[UART_RX_BUFFER_SIZE];
 static char mode_string_dec_accel[UART_RX_BUFFER_SIZE];
 static char mode_string_inc_amp[UART_RX_BUFFER_SIZE];
@@ -36,7 +31,6 @@ static char mode_string_mode_single_pid[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_test[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_control[UART_RX_BUFFER_SIZE];
 static char mode_string_mode_motor_characterization_mode[UART_RX_BUFFER_SIZE];
-static char mode_string_mode_full_sysid[UART_RX_BUFFER_SIZE];
 static char mode_string_dec_pend_p[UART_RX_BUFFER_SIZE];
 static char mode_string_inc_pend_p[UART_RX_BUFFER_SIZE];
 static char mode_string_dec_pend_i[UART_RX_BUFFER_SIZE];
@@ -90,8 +84,6 @@ static float rotor_position_command_deg;
 static int rotor_test_speed_min, rotor_test_speed_max;
 static int rotor_test_acceleration_max, swing_deceleration_max;
 static uint16_t current_speed;
-static int enable_pendulum_sysid_test;
-static int enable_full_sysid;
 static int enable_encoder_test;
 static int motor_state;
 static float rotor_chirp_amplitude;
@@ -413,15 +405,11 @@ void assign_mode_3(AppControlContext *ctx, arm_pid_instance_a_f32 *PID_Pend,
 void set_mode_strings(void){
 	sprintf(mode_string_mode_1, "1");
 	sprintf(mode_string_mode_2, "2");
-	sprintf(mode_string_mode_3, "3");
-	sprintf(mode_string_mode_4, "4");
-	sprintf(mode_string_mode_5, "m");
 	sprintf(mode_string_mode_8, "g");
 	sprintf(mode_string_mode_single_pid, "s");
 	sprintf(mode_string_mode_test, "t");
 	sprintf(mode_string_mode_control, "r");
 	sprintf(mode_string_mode_motor_characterization_mode, "c");
-	sprintf(mode_string_mode_full_sysid, "I");
 	sprintf(mode_string_dec_accel, "d");
 	sprintf(mode_string_inc_accel, "i");
 	sprintf(mode_string_inc_amp, "j");
@@ -473,21 +461,11 @@ void set_mode_strings(void){
 
 	mode_1 = 1;
 	mode_2 = 2;
-	mode_3 = 3;
-	mode_4 = 4;
-	mode_5 = 5;
-	mode_adaptive_off = 6;
-	mode_adaptive = 7;
 	mode_8 = 8;
-	mode_9 = 9;
 	mode_10 = 10;
 	mode_11 = 11;
 	mode_13 = 13;
 	mode_15 = 15;
-	mode_16 = 16;
-	mode_17 = 17;
-	mode_18 = 18;
-	mode_19 = 19;
 	mode_quit = 0;
 }
 
@@ -614,11 +592,6 @@ static void get_user_mode_index(char * user_string, int * char_mode_select, int 
 		*char_mode_select = 1;
 	}
 
-	if (strcmp(user_string,mode_string_mode_full_sysid)==0){
-		*mode_index = 19;
-		*char_mode_select = 1;
-	}
-
 	if(*char_mode_select == 0){
 		*mode_index = atoi(user_string);
 	}
@@ -658,11 +631,6 @@ static void get_user_mode_index(char * user_string, int * char_mode_select, int 
 		mode_interactive = 1;
 		break;
 
-	case 19:
-		*mode_index = mode_19;
-		mode_interactive = 1;
-		break;
-
 	default:
 		*mode_index = mode_1;
 		break;
@@ -678,7 +646,6 @@ void user_configuration(AppControlContext *ctx){
 	enable_encoder_test = 0;
 	/* enable_rotor_actuator_high_speed_test removed (write-only, never read) */
 	ctx->enable_motor_actuator_characterization_mode = 0;
-	enable_full_sysid = 0;
 
 	ctx->gains.enable_disturbance_rejection_step = 0;
 	ctx->gains.enable_noise_rejection_step = 0;
@@ -766,8 +733,6 @@ void user_configuration(AppControlContext *ctx){
 			 * Configure Motor Speed Profile and PID Controller Gains
 			 */
 
-			enable_pendulum_sysid_test = 0;
-			enable_full_sysid = 0;
 			ctx->gains.enable_disturbance_rejection_step = 0;
 			ctx->gains.enable_noise_rejection_step = 0;
 			ctx->gains.enable_sensitivity_fnc_step = 0;
@@ -801,107 +766,6 @@ void user_configuration(AppControlContext *ctx){
 
 				ctx->enc_cal.enable_angle_cal = 0;
 				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
-				if (enable_angle_cal_resp == 0){
-					ctx->enc_cal.enable_angle_cal = 1;
-				}
-				sprintf(uart_tx_buf, "%i", enable_angle_cal_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_angle_cal_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				ctx->enable_swing_up = ENABLE_SWING_UP;
-				enable_swing_up_resp = 0;
-				sprintf(uart_tx_buf, "\n\rSwing Up Enabled - Enter 1 to Disable.....................................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_swing_up_resp);
-				if (enable_swing_up_resp == 1){
-					ctx->enable_swing_up = 0;
-				}
-				sprintf(uart_tx_buf, "%i", enable_swing_up_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_swing_up_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				break;
-
-				/* Mode 3 selection */
-
-			case 3:
-				/* Flush read buffer  */
-				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
-
-				ctx->gains.enable_state_feedback = 0;
-				ctx->select_suspended_mode = 0;
-				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_2;
-				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_2;
-				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_2;
-				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_2;
-				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_2;
-				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_2;
-				ctx->max_speed = 		MAX_SPEED_MODE_2;
-				ctx->min_speed = 		MIN_SPEED_MODE_2;
-
-				sprintf(uart_tx_buf, "\n\rMode %i Configured", mode_index);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				ctx->enc_cal.enable_angle_cal = 0;
-				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable...................: ");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
-				if (enable_angle_cal_resp == 0){
-					ctx->enc_cal.enable_angle_cal = 1;
-				}
-				sprintf(uart_tx_buf, "%i", enable_angle_cal_resp);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-				if ( enable_angle_cal_resp < 0 ){
-					sprintf(uart_tx_buf, "\n\r\n\r*************************System Reset and Restart***************************\n\r\n\r");
-					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-					HAL_Delay(3000);
-					NVIC_SystemReset();
-				}
-
-				break;
-
-				/* Mode 4 selection */
-
-			case 4:
-				/* Flush read buffer  */
-				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
-
-				ctx->gains.enable_state_feedback = 0;
-				ctx->select_suspended_mode = 0;
-				ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_3;
-				ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_3;
-				ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_3;
-				ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_3;
-				ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_3;
-				ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_3;
-				ctx->max_speed = 		MAX_SPEED_MODE_3;
-				ctx->min_speed = 		MIN_SPEED_MODE_3;
-
-				sprintf(uart_tx_buf, "\n\rMode %i Configured", mode_index);
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf,
-						strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				sprintf(uart_tx_buf, "\n\r.....Enter negative value at any prompt to correct entry and Restart... \n\r");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-
-				ctx->enc_cal.enable_angle_cal = 0;
-				sprintf(uart_tx_buf, "\n\rPlatform Angle Calibration Enabled - Enter 1 to Disable................ ");
 				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 				read_int(&RxBuffer_ReadIdx, &RxBuffer_WriteIdx, &readBytes, &enable_angle_cal_resp);
 				if (enable_angle_cal_resp == 0){
@@ -977,13 +841,6 @@ void user_configuration(AppControlContext *ctx){
 
 				break;
 
-
-				/* Adaptive Mode selection - currently disabled */
-			case 7:
-				/* Flush read buffer  */
-				for (k = 0; k < SERIAL_MSG_MAXLEN; k++) { Msg.Data[k] = 0; }
-
-				break;
 
 				/* General mode selection requiring user specification of all configurations */
 			case 8:
@@ -1576,13 +1433,6 @@ void user_configuration(AppControlContext *ctx){
 				rotor_chirp_end_freq = 5.0f;
 				rotor_chirp_period = 40.0f;
 
-				break;
-
-				/* Pendulum system identification mode */
-			case 14:
-				enable_pendulum_sysid_test = 1;
-				sprintf(uart_tx_buf, "\n\rPendulum System Identification Test Mode Configured");
-				HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 				break;
 
 				/* Rotor actuator control mode */
