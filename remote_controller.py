@@ -188,6 +188,30 @@ class DualPidController:
         (i.e. right before computing/sending real corrective u values)."""
         self._catch_start_time = time.time()
 
+    def enter_capture(self, theta_p_deg: float, theta_r_deg: float):
+        """Convenience for the common case of first entering/re-entering the
+        capture zone: resets state, starts the gain-schedule timer, and
+        primes the previous-error terms to the current position so the
+        first derivative sample is zero instead of a startup spike.
+
+        (2026-07-19: briefly removed this priming to match controller_init()
+        on the MCU, which memset()s state to 0 rather than priming — that
+        produces a large first-cycle derivative kick there. Shadow-logging
+        confirmed the open-loop match, but real Mode B catches got *worse*
+        without the priming, not better. Root cause turned out to be
+        unrelated: a controlled Mode D experiment [decimating the MCU's own
+        control-update rate to 100Hz with everything else identical] showed
+        the real driver of Mode B's lower catch reliability is the 100Hz vs
+        500Hz control-update-rate gap itself, not this startup transient.
+        Restored the priming, which is the better choice for this
+        architecture regardless of what the MCU's own cold-start does.)"""
+        self.reset()
+        self.start_catch()
+        theta_p_rad = math.radians(theta_p_deg)
+        theta_r_rad = math.radians(theta_r_deg)
+        self._prev_ep = ENCODER_ANGLE_POLARITY * theta_p_rad / STEPPER_RAD_PER_STEP
+        self._prev_er = theta_r_rad / STEPPER_RAD_PER_STEP
+
     def _pid_execute(self, Kp, Ki, Kd, error, prev_error, state, lpf):
         return pid_execute(Kp, Ki, Kd, error, prev_error, state, lpf, self._ts)
 
@@ -217,7 +241,26 @@ class DualPidController:
         # Accumulating integral compensator (controller.c:126-133), active
         # whenever integral_compensator_gain != 0 — replaces, not adds to,
         # the plain feedforward term used when it's 0.
-        self._rotor_integral += (rotor_ref * FEEDFORWARD_GAIN - theta_r_steps) * self._ts
+        #
+        # Anti-windup (conditional integration, added 2026-07-19): only
+        # commit this step's accumulation if the output isn't already
+        # saturated in the same direction that accumulating would push it
+        # further. controller.c's onboard equivalent has no anti-windup
+        # either, but the MCU runs this at 500Hz vs Python's 100Hz, so any
+        # windup it accumulates unwinds 5x faster in wall-clock time — a big
+        # kick that pins u at U_MAX for many cycles let the integral wind up
+        # for the whole saturated stretch here, overshooting once it finally
+        # started to unwind.
+        u_before_step = u_pend + u_rotor - gains['Ki_comp'] * self._rotor_integral
+        integral_step = (rotor_ref * FEEDFORWARD_GAIN - theta_r_steps) * self._ts
+        delta_u = -gains['Ki_comp'] * integral_step
+        saturated_same_direction = (
+            (u_before_step >= U_MAX and delta_u > 0) or
+            (u_before_step <= -U_MAX and delta_u < 0)
+        )
+        if not saturated_same_direction:
+            self._rotor_integral += integral_step
+
         u = u_pend + u_rotor - gains['Ki_comp'] * self._rotor_integral
         return max(-U_MAX, min(U_MAX, u))
 
@@ -357,13 +400,7 @@ def run_cli(ser: serial.Serial) -> None:
             # First cycle in balance region: initialize PID state from current
             # position so derivative starts at 0 (avoids startup spike)
             if not in_balance:
-                ctrl.reset()
-                ctrl.start_catch()
-                # Prime prev_error to current error so first diff = 0
-                theta_p_rad = math.radians(theta_p)
-                theta_r_rad = math.radians(theta_r)
-                ctrl._prev_ep = ENCODER_ANGLE_POLARITY * theta_p_rad / STEPPER_RAD_PER_STEP
-                ctrl._prev_er = theta_r_rad / STEPPER_RAD_PER_STEP
+                ctrl.enter_capture(theta_p, theta_r)
                 in_balance = True
 
             u = ctrl.compute(theta_p, theta_r, rotor_ref_steps)
@@ -421,6 +458,12 @@ class LinkManager:
         self.ctrl = DualPidController()
         self.swing_ctrl = SwingUpController()
         self.in_balance = False
+        # Mode 1 only: DualPidController run in parallel, never sent, purely
+        # to log what Mode B's control law would have done at each sample
+        # for direct comparison against Mode 1's actual (MCU-computed) u —
+        # see u_python column in the CSV log during a Mode 1 session.
+        self.shadow_ctrl = DualPidController()
+        self.shadow_in_balance = False
         self._reset_pending = False
         # Mode to start when `start_requested` fires. 'B' = PC computes u
         # once caught (DualPidController, active_control=True), onboard
@@ -526,6 +569,8 @@ class LinkManager:
             self.ctrl = DualPidController()
             self.swing_ctrl.reset()
             self.in_balance = False
+            self.shadow_ctrl = DualPidController()
+            self.shadow_in_balance = False
             for d in self.data:
                 d.clear()
             self._open_log()
@@ -578,9 +623,24 @@ class LinkManager:
         i_idx, theta_p, theta_r, omega_p, omega_r, u_prev = vals
 
         if not self.active_control:
-            # Mode 1: the MCU's own onboard PID runs the session — just
-            # observe the telemetry it already reports, send nothing back.
-            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, None)
+            # Mode 1: the MCU's own onboard PID runs the session — send
+            # nothing back, but also run Mode B's control law in shadow
+            # (same capture/rotor-limit logic, never sent to the MCU) purely
+            # to log what it would have done here, for direct comparison
+            # against Mode 1's actual behaviour.
+            if abs(theta_r) > ROTOR_LIMIT_DEG:
+                u_shadow = 0.0
+            elif abs(theta_p) > PEND_CAPTURE_DEG:
+                self.shadow_in_balance = False
+                self.shadow_ctrl.reset()
+                u_shadow = None
+            else:
+                if not self.shadow_in_balance:
+                    self.shadow_ctrl.enter_capture(theta_p, theta_r)
+                    self.shadow_in_balance = True
+                u_shadow = self.shadow_ctrl.compute(theta_p, theta_r, rotor_ref_steps)
+
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u_shadow)
             self.data[0].append(theta_p)
             self.data[1].append(theta_r)
             self.data[2].append(u_prev)
@@ -616,12 +676,7 @@ class LinkManager:
             return
 
         if not self.in_balance:
-            self.ctrl.reset()
-            self.ctrl.start_catch()
-            theta_p_rad = math.radians(theta_p)
-            theta_r_rad = math.radians(theta_r)
-            self.ctrl._prev_ep = ENCODER_ANGLE_POLARITY * theta_p_rad / STEPPER_RAD_PER_STEP
-            self.ctrl._prev_er = theta_r_rad / STEPPER_RAD_PER_STEP
+            self.ctrl.enter_capture(theta_p, theta_r)
             self.in_balance = True
 
         u = self.ctrl.compute(theta_p, theta_r, rotor_ref_steps)
@@ -680,9 +735,12 @@ def run_gui(port: str) -> None:
                                     variable=mode_var, value='C', command=on_mode_change)
     mode_1_radio = ttk.Radiobutton(mode_frame, text="Mode 1 (MCU内蔵PID)",
                                     variable=mode_var, value='1', command=on_mode_change)
+    mode_d_radio = ttk.Radiobutton(mode_frame, text="Mode D (MCU@100Hz診断)",
+                                    variable=mode_var, value='D', command=on_mode_change)
     mode_b_radio.pack(side="left")
     mode_c_radio.pack(side="left")
     mode_1_radio.pack(side="left")
+    mode_d_radio.pack(side="left")
 
     # --- Swing-up gain panel (Mode C) — live-tunable, no restart needed ---
     swingup_frame = ttk.LabelFrame(root, text="Swing-up gains (Mode C)", padding=6)
@@ -731,6 +789,7 @@ def run_gui(port: str) -> None:
         mode_b_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_c_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
+        mode_d_radio.state(['!disabled'] if at_prompt else ['disabled'])
 
         for i in range(3):
             lines[i].set_data(range(len(link.data[i])), list(link.data[i]))
