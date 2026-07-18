@@ -30,13 +30,17 @@ GUI mode (--gui):
 """
 
 import argparse
+import csv
 import math
 import sys
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import serial
+
+LOG_DIR = Path(__file__).resolve().parent / "logs"
 
 # ---------------------------------------------------------------------------
 # Serial port
@@ -50,12 +54,23 @@ STEPPER_RAD_PER_STEP = 2.0 * math.pi / 3200.0   # 200 steps * 16 µstep
 ENCODER_ANGLE_POLARITY = -1.0                     # physical sign convention
 
 # ---------------------------------------------------------------------------
-# Controller gains  (Mode 1 defaults from edukit_system.h)
+# Controller gains
+#
+# These are NOT the edukit_system.h PRIMARY/SECONDARY_*_MODE_1 macros
+# (300/0/30 pend, 15.0/0.0/7.5 rotor) — those only apply before swing-up and
+# again ~26s after balance starts, once angle calibration finishes. The gains
+# actually catching the pendulum right after swing-up come from
+# angle_cal_update()'s i==1 branch (Src/app_runtime.c): Kp_pend=419/Kd_pend=56,
+# Kp_rotor=21.1/Kd_rotor=17.2, PLUS enable_state_feedback=1 and a genuine
+# accumulating integral compensator (gain=10) that this simple PID doesn't
+# implement. Using just the higher P/D values here as a first approximation,
+# without the state-feedback/integral-compensator machinery.
 # ---------------------------------------------------------------------------
-Kp_pend  = 300.0
-Kd_pend  =  30.0
-Kp_rotor =  15.0
-Kd_rotor =   7.5
+Kp_pend  = 419.0
+Kd_pend  =  56.0
+Kp_rotor =  21.1
+Ki_rotor =   0.0
+Kd_rotor =  17.2
 
 # ---------------------------------------------------------------------------
 # Derivative IIR low-pass filter coefficients
@@ -79,13 +94,36 @@ _LP_ROTOR = _lpf_coeffs(50.0,  _TS)   # (a0, a1) for rotor derivative
 # Safety limits
 # ---------------------------------------------------------------------------
 ROTOR_LIMIT_DEG  = 200.0    # send u=0 when rotor exceeds this
-PEND_CAPTURE_DEG =  30.0    # skip cycles where pendulum is too far from upright
-U_MAX            = 20000.0  # steps/s², hard clip on total output
+
+# Cycles where |theta_p| exceeds this abandon control (treated as "still
+# swinging up"). Logged captures showed the pendulum overshoot past the old
+# 30.0 threshold on its second (post-zero-crossing) swing while still
+# actively decelerating (omega_p magnitude falling: -389 -> -356 -> -309
+# right before the cutoff) — i.e. the controller was recovering it, but got
+# cut off early. Widened to give oscillations more room to damp out.
+PEND_CAPTURE_DEG =  60.0
+
+# steps/s^2, hard clip on total output. Matches HW_MAXIMUM_ACCELERATION /
+# HW_MAXIMUM_DECELERATION (Src/hardware.c) — the real physical ceiling
+# apply_acceleration() clamps to on the MCU regardless of requested value.
+# The onboard PID (Mode 1) never clips its own output at all and relies
+# entirely on that hardware-layer clamp; logged telemetry showed it
+# requesting up to ~330000 during a successful catch. The previous
+# U_MAX=20000 here was an arbitrary extra restriction ~6.5x below even the
+# real hardware limit and was the dominant cause of Mode B's divergence
+# (logged u saturating at -20000 for ~170ms while theta_p ran away from
+# -0.9° past the 30° capture threshold).
+U_MAX = 131071.0
 
 # ---------------------------------------------------------------------------
-# Rotor reference (steps from centre).
+# Rotor reference (steps from centre) and state-feedback / integral
+# compensator params, matching angle_cal_update()'s i==1 catch-phase setup
+# (Src/app_runtime.c): rotor_position_command_steps=0, feedforward_gain=1,
+# integral_compensator_gain=10.
 # ---------------------------------------------------------------------------
 rotor_ref_steps = 0.0
+FEEDFORWARD_GAIN = 1.0
+INTEGRAL_COMPENSATOR_GAIN = 10.0
 
 
 class DualPidController:
@@ -97,6 +135,7 @@ class DualPidController:
         self._rotor_state = [0.0, 0.0]
         self._prev_ep = 0.0
         self._prev_er = 0.0
+        self._rotor_integral = 0.0   # accumulating state-feedback integral (rotor position, steps)
         self._ts = _TS
 
     def reset(self):
@@ -104,6 +143,7 @@ class DualPidController:
         self._rotor_state = [0.0, 0.0]
         self._prev_ep = 0.0
         self._prev_er = 0.0
+        self._rotor_integral = 0.0
 
     def _pid_execute(self, Kp, Ki, Kd, error, prev_error, state, lpf):
         """One-step PID with first-order IIR LPF on derivative.
@@ -129,14 +169,18 @@ class DualPidController:
         self._prev_ep = e_p
 
         # Secondary PID: rotor (state-feedback mode: error = current position)
-        e_r = (theta_r - rotor_ref * STEPPER_RAD_PER_STEP) / STEPPER_RAD_PER_STEP
+        theta_r_steps = theta_r / STEPPER_RAD_PER_STEP
+        e_r = theta_r_steps - rotor_ref
         u_rotor = self._pid_execute(
-            Kp_rotor, 0.0, Kd_rotor,
+            Kp_rotor, Ki_rotor, Kd_rotor,
             e_r, self._prev_er, self._rotor_state, _LP_ROTOR)
         self._prev_er = e_r
 
-        # feedforward_gain=1, rotor_position_command_steps=rotor_ref
-        u = u_pend + u_rotor - rotor_ref
+        # Accumulating integral compensator (controller.c:126-133), active
+        # whenever integral_compensator_gain != 0 — replaces, not adds to,
+        # the plain feedforward term used when it's 0.
+        self._rotor_integral += (rotor_ref * FEEDFORWARD_GAIN - theta_r_steps) * self._ts
+        u = u_pend + u_rotor - INTEGRAL_COMPENSATOR_GAIN * self._rotor_integral
         return max(-U_MAX, min(U_MAX, u))
 
 
@@ -242,6 +286,7 @@ def run_cli(ser: serial.Serial) -> None:
 
 BOOT_BANNER = 'System Starting Prepare to Enter Mode Selection'
 PROMPT_TEXT = 'Enter Mode Selection Now'
+SWING_UP_STARTING = 'Pendulum Swing Up Starting'
 
 STATE_WAITING_BOOT = 'waiting_boot'
 STATE_AT_PROMPT    = 'at_prompt'
@@ -278,10 +323,42 @@ class LinkManager:
         self.ctrl = DualPidController()
         self.in_balance = False
         self._reset_pending = False
+        # Mode to start when `start_requested` fires. 'B' = PC computes u
+        # (DualPidController, active_control=True). '1' = MCU's own onboard
+        # PID runs the whole session (active_control=False, GUI only observes
+        # the telemetry the firmware already reports for every mode).
+        self.selected_mode = 'B'
+        self.active_control = True
+        self._log_file = None
+        self._log_writer = None
+        self._log_start_time = 0.0
 
     def _set_state(self, state, extra=''):
         self.state = state
         self.status_text = STATUS_TEXT[state] + extra
+
+    def _open_log(self):
+        LOG_DIR.mkdir(exist_ok=True)
+        path = LOG_DIR / f"log_{time.strftime('%Y%m%d_%H%M%S')}_mode{self.selected_mode}.csv"
+        self._log_file = open(path, 'w', newline='')
+        self._log_writer = csv.writer(self._log_file)
+        self._log_writer.writerow(['time_s', 'i', 'theta_p_deg', 'theta_r_deg',
+                                    'omega_p_deg_s', 'omega_r_deg_s', 'u_mcu', 'u_python'])
+        self._log_start_time = time.time()
+        print(f"Logging to {path}")
+
+    def _close_log(self):
+        if self._log_file is not None:
+            self._log_file.close()
+            self._log_file = None
+            self._log_writer = None
+
+    def _log_sample(self, i_idx, theta_p, theta_r, omega_p, omega_r, u_mcu, u_python):
+        if self._log_writer is None:
+            return
+        t = time.time() - self._log_start_time
+        self._log_writer.writerow([f"{t:.3f}", i_idx, theta_p, theta_r, omega_p, omega_r,
+                                    u_mcu, '' if u_python is None else f"{u_python:.1f}"])
 
     def _read_line(self):
         raw = self.ser.readline()
@@ -300,6 +377,17 @@ class LinkManager:
             return False
         return True
 
+    @classmethod
+    def _signals_unwanted_session(cls, line):
+        """True if this line means the firmware started a session we didn't
+        ask for. Swing-up itself emits no telemetry (report_telemetry() only
+        runs once the balance loop starts), so without this check the
+        self-heal below would only fire *after* swing-up already completed —
+        letting the arm swing up on its own before being reset."""
+        if SWING_UP_STARTING in line:
+            return True
+        return cls._looks_like_telemetry(line)
+
     def run(self):
         try:
             while not self.quit.is_set():
@@ -311,6 +399,8 @@ class LinkManager:
                     self._step_running()
         except serial.SerialException as e:
             self._set_state(STATE_ERROR, f': {e}')
+        finally:
+            self._close_log()
 
     def _step_waiting(self):
         """Shared body for WAITING_BOOT and STOPPING: poll until the
@@ -322,18 +412,20 @@ class LinkManager:
             self._reset_pending = False
             self._set_state(STATE_AT_PROMPT)
             return
-        if self._looks_like_telemetry(line) and not self._reset_pending:
+        if self._signals_unwanted_session(line) and not self._reset_pending:
             self.ser.write(b'q\r')
             self._reset_pending = True
 
     def _step_at_prompt(self):
         if self.start_requested.is_set():
             self.start_requested.clear()
-            self.ser.write(b'B\r')
+            self.active_control = (self.selected_mode == 'B')
+            self.ser.write((self.selected_mode + '\r').encode())
             self.ctrl = DualPidController()
             self.in_balance = False
             for d in self.data:
                 d.clear()
+            self._open_log()
             self._set_state(STATE_RUNNING)
             return
 
@@ -343,7 +435,7 @@ class LinkManager:
         if PROMPT_TEXT in line:
             self._reset_pending = False
             return
-        if self._looks_like_telemetry(line) and not self._reset_pending:
+        if self._signals_unwanted_session(line) and not self._reset_pending:
             # Firmware silently started a session we didn't ask for
             # (e.g. its 60s no-input default-mode timeout) — force it back.
             self.ser.write(b'q\r')
@@ -353,6 +445,7 @@ class LinkManager:
         if self.stop_requested.is_set():
             self.stop_requested.clear()
             self.ser.write(b'q\r')
+            self._close_log()
             self._set_state(STATE_STOPPING)
             return
 
@@ -361,6 +454,7 @@ class LinkManager:
             return
 
         if BOOT_BANNER in line:
+            self._close_log()
             self._set_state(STATE_WAITING_BOOT, extra='(予期しないリセットを検知しました)')
             return
 
@@ -380,7 +474,17 @@ class LinkManager:
 
         i_idx, theta_p, theta_r, omega_p, omega_r, u_prev = vals
 
+        if not self.active_control:
+            # Mode 1: the MCU's own onboard PID runs the session — just
+            # observe the telemetry it already reports, send nothing back.
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, None)
+            self.data[0].append(theta_p)
+            self.data[1].append(theta_r)
+            self.data[2].append(u_prev)
+            return
+
         if abs(theta_r) > ROTOR_LIMIT_DEG:
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, None)
             self.ser.write(b'u 0.0\r')
             return
 
@@ -389,6 +493,7 @@ class LinkManager:
                 self.ser.write(b'u 0.0\r')
             self.in_balance = False
             self.ctrl.reset()
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, None)
             return
 
         if not self.in_balance:
@@ -401,6 +506,7 @@ class LinkManager:
 
         u = self.ctrl.compute(theta_p, theta_r, rotor_ref_steps)
         self.ser.write(f'u {u:.1f}\r'.encode())
+        self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u)
 
         self.data[0].append(theta_p)
         self.data[1].append(theta_r)
@@ -440,6 +546,20 @@ def run_gui(port: str) -> None:
     stop_btn.pack(side="right", padx=4)
     start_btn.pack(side="right", padx=4)
 
+    mode_var = tk.StringVar(value=link.selected_mode)
+
+    def on_mode_change():
+        link.selected_mode = mode_var.get()
+
+    mode_frame = ttk.Frame(top)
+    mode_frame.pack(side="right", padx=12)
+    mode_b_radio = ttk.Radiobutton(mode_frame, text="Mode B (Python PID)",
+                                    variable=mode_var, value='B', command=on_mode_change)
+    mode_1_radio = ttk.Radiobutton(mode_frame, text="Mode 1 (MCU内蔵PID)",
+                                    variable=mode_var, value='1', command=on_mode_change)
+    mode_b_radio.pack(side="left")
+    mode_1_radio.pack(side="left")
+
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
     labels = ["Pendulum Angle [deg]", "Rotor Angle [deg]", "Input u [steps/s²]"]
     lines = []
@@ -455,8 +575,11 @@ def run_gui(port: str) -> None:
 
     def tick():
         status_var.set(link.status_text)
-        start_btn.state(['!disabled'] if link.state == STATE_AT_PROMPT else ['disabled'])
+        at_prompt = link.state == STATE_AT_PROMPT
+        start_btn.state(['!disabled'] if at_prompt else ['disabled'])
         stop_btn.state(['!disabled'] if link.state == STATE_RUNNING else ['disabled'])
+        mode_b_radio.state(['!disabled'] if at_prompt else ['disabled'])
+        mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
 
         for i in range(3):
             lines[i].set_data(range(len(link.data[i])), list(link.data[i]))
