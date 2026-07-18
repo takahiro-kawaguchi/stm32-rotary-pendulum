@@ -130,7 +130,6 @@ void app_bootstrap_system(AppControlContext *ctx, L6474_Init_t *motor_init)
 		ctx->lpf.iir_LT_2 = ctx->lpf.iir_LT_0 * (1 - IWon);
 	}
 
-	ctx->timing.tick_read_cycle_start = HAL_GetTick();
 	sprintf(uart_tx_buf, "\n\rSystem Starting Prepare to Enter Mode Selection... ");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 

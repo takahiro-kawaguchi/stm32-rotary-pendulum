@@ -55,8 +55,6 @@ typedef struct {
 	uint32_t tick_cycle_current;
 	uint32_t tick_cycle_previous;
 	uint32_t tick_cycle_start;
-	uint32_t tick_read_cycle;
-	uint32_t tick_read_cycle_start;
 	float t_sample_s;
 	float t_sample_rotor_s;
 } LoopTimingState;

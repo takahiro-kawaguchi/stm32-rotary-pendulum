@@ -25,22 +25,12 @@ void app_run_mode_loop(AppControlContext *ctx)
 		ui_set_mode_interactive(0);
 		user_prompt();
 
-		if (ui_get_mode_interactive() == 0) {
-			sprintf(uart_tx_buf,
-					"\n\rEnter Mode Selection Now or System Will Start in Default Mode in %u Seconds..: ",
-					START_DEFAULT_MODE_TIME / 1000);
-			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-		}
-
-		if (ui_get_mode_interactive() == 1) {
-			sprintf(uart_tx_buf, "\n\rEnter Mode Selection Now: \n\r");
-			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-		}
+		sprintf(uart_tx_buf, "\n\rEnter Mode Selection Now: \n\r");
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 
 		for (k = 0; k < SERIAL_MSG_MAXLEN; k++) {
 			Msg.Data[k] = 0;
 		}
-		ctx->timing.tick_read_cycle_start = HAL_GetTick();
 		user_configuration(ctx);
 
 		app_prepare_control_session(ctx);

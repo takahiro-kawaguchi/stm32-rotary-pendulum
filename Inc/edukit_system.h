@@ -256,17 +256,6 @@
 
 #define USER_TRANSITION_DWELL 500
 
-/*
- * START_DEFAULT_MODE_TIME determines time delay for waiting for user input after start or reset.
- * For a time (in ticks) greater than this period, control will initiate with default mode 1 if
- * no user input appears.
- *
- * This permits system operation in default mode independent of external command from separate
- * host.
- */
-
-#define START_DEFAULT_MODE_TIME 60000			// delay in ms to permit user input after system start
-												// If no user response then set default values
 #define PENDULUM_ORIENTATION_START_DELAY 10000	// Time permitted to user to orient Pendulum vertical at start
 
 #define INITIAL_START_DELAY 1000				// Determines time available for ensuring pendulum down and prior to user prompt

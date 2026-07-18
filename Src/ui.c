@@ -644,31 +644,6 @@ void user_configuration(AppControlContext *ctx){
 		readBytes = Extract_Msg(RxBuffer, RxBuffer_ReadIdx,
 				RxBuffer_WriteIdx, UART_RX_BUFFER_SIZE, &Msg);
 
-
-		/*
-		 * Exit read loop after timeout selecting default Mode 1
-		 */
-
-		ctx->timing.tick_read_cycle = HAL_GetTick();
-		if (((ctx->timing.tick_read_cycle - ctx->timing.tick_read_cycle_start) > START_DEFAULT_MODE_TIME) && (mode_interactive == 0)) {
-			sprintf(uart_tx_buf, "\n\rNo Entry Detected - Now Selecting Default Inverted Pendulum Mode 1......: \n\r");
-			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
-			ctx->gains.enable_state_feedback = 0;
-			ctx->select_suspended_mode = 0;
-			ctx->gains.proportional = 		PRIMARY_PROPORTIONAL_MODE_1;
-			ctx->gains.integral = 			PRIMARY_INTEGRAL_MODE_1;
-			ctx->gains.derivative = 		PRIMARY_DERIVATIVE_MODE_1;
-			ctx->gains.rotor_p_gain = 		SECONDARY_PROPORTIONAL_MODE_1;
-			ctx->gains.rotor_i_gain = 		SECONDARY_INTEGRAL_MODE_1;
-			ctx->gains.rotor_d_gain = 		SECONDARY_DERIVATIVE_MODE_1;
-			ctx->max_speed = 		MAX_SPEED_MODE_1;
-			ctx->min_speed = 		MIN_SPEED_MODE_1;
-			ctx->enc_cal.enable_angle_cal = 1;
-			ctx->enable_swing_up = 1;
-			L6474_SetAnalogValue(0, L6474_TVAL, TORQ_CURRENT_DEFAULT);
-			break;
-		}
-
 		if (readBytes) // Message found
 		{
 			RxBuffer_ReadIdx = (RxBuffer_ReadIdx + readBytes) % UART_RX_BUFFER_SIZE;
