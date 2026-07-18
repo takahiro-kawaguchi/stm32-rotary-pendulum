@@ -143,6 +143,19 @@ rotor_ref_steps = 0.0
 FEEDFORWARD_GAIN = 1.0
 
 
+def pid_execute(Kp, Ki, Kd, error, prev_error, state, lpf, ts):
+    """One-step PID with first-order IIR LPF on derivative.
+    Matches STM32 pid_execute() exactly. `state` is a mutable [prev_diff,
+    prev_diff_filt] pair, updated in place."""
+    a0, a1 = lpf
+    diff      = Kd * (error - prev_error) / ts
+    diff_filt = a0 * diff + a0 * state[0] - a1 * state[1]
+    output    = Kp * error + Ki * ts * (error + prev_error) / 2.0 + diff_filt
+    state[0]  = diff
+    state[1]  = diff_filt
+    return output
+
+
 class DualPidController:
     """Stateful dual-PID that mirrors STM32 controller_compute_dual_pid()."""
 
@@ -176,15 +189,7 @@ class DualPidController:
         self._catch_start_time = time.time()
 
     def _pid_execute(self, Kp, Ki, Kd, error, prev_error, state, lpf):
-        """One-step PID with first-order IIR LPF on derivative.
-        Matches STM32 pid_execute() exactly."""
-        a0, a1 = lpf
-        diff      = Kd * (error - prev_error) / self._ts
-        diff_filt = a0 * diff + a0 * state[0] - a1 * state[1]
-        output    = Kp * error + Ki * self._ts * (error + prev_error) / 2.0 + diff_filt
-        state[0]  = diff
-        state[1]  = diff_filt
-        return output
+        return pid_execute(Kp, Ki, Kd, error, prev_error, state, lpf, self._ts)
 
     def compute(self, theta_p_deg: float, theta_r_deg: float,
                 rotor_ref: float = 0.0) -> float:
@@ -214,6 +219,65 @@ class DualPidController:
         # the plain feedforward term used when it's 0.
         self._rotor_integral += (rotor_ref * FEEDFORWARD_GAIN - theta_r_steps) * self._ts
         u = u_pend + u_rotor - gains['Ki_comp'] * self._rotor_integral
+        return max(-U_MAX, min(U_MAX, u))
+
+
+# ---------------------------------------------------------------------------
+# Swing-up gains (Mode C). Ported from STM32pendulum's gui_tool branch
+# (Src/main.c there): a plain rotor-position PD pumps energy into the
+# pendulum every cycle; a pendulum-angle PD term is added on top only near
+# the bottom (within SWINGUP_GAINS['near_bottom_deg'] of hanging straight
+# down, i.e. theta_p_deg near +-180) to help phase-sync the push with the
+# pendulum's own swing. That branch left all swing-up gains at 0 by default
+# and tuned them live via serial commands from its GUI — there is no
+# known-good starting point to port numerically, so these start at 0 too and
+# are meant to be tuned live from this script's GUI (see run_gui()). All in
+# one dict so the GUI can mutate values in place with no `global` needed.
+# ---------------------------------------------------------------------------
+SWINGUP_GAINS = dict(Kp_rotor=0.0, Kd_rotor=0.0, Kp_pend=0.0, Kd_pend=0.0,
+                      near_bottom_deg=10.0)
+
+
+class SwingUpController:
+    """Energy-pump swing-up policy for Mode C. Active while |theta_p| is far
+    from upright; LinkManager hands off to DualPidController once within
+    PEND_CAPTURE_DEG."""
+
+    def __init__(self):
+        self._pend_state  = [0.0, 0.0]
+        self._rotor_state = [0.0, 0.0]
+        self._prev_ep = 0.0
+        self._prev_er = 0.0
+        self._ts = _TS
+
+    def reset(self):
+        self._pend_state  = [0.0, 0.0]
+        self._rotor_state = [0.0, 0.0]
+        self._prev_ep = 0.0
+        self._prev_er = 0.0
+
+    def compute(self, theta_p_deg: float, theta_r_deg: float) -> float:
+        theta_p = math.radians(theta_p_deg)
+        theta_r = math.radians(theta_r_deg)
+
+        # Rotor-position PD: regulates rotor to center. Runs every cycle
+        # regardless of pendulum position — this IS the swing-up energy pump.
+        e_r = theta_r / STEPPER_RAD_PER_STEP
+        u_rotor = pid_execute(
+            SWINGUP_GAINS['Kp_rotor'], 0.0, SWINGUP_GAINS['Kd_rotor'],
+            e_r, self._prev_er, self._rotor_state, _LP_ROTOR, self._ts)
+        self._prev_er = e_r
+
+        # Pendulum-angle PD: always computed (so its derivative filter state
+        # stays warm), only added to the output near the bottom.
+        e_p = ENCODER_ANGLE_POLARITY * theta_p / STEPPER_RAD_PER_STEP
+        u_pend = pid_execute(
+            SWINGUP_GAINS['Kp_pend'], 0.0, SWINGUP_GAINS['Kd_pend'],
+            e_p, self._prev_ep, self._pend_state, _LP_PEND, self._ts)
+        self._prev_ep = e_p
+
+        near_bottom = abs(abs(theta_p_deg) - 180.0) < SWINGUP_GAINS['near_bottom_deg']
+        u = (u_pend + u_rotor) if near_bottom else u_rotor
         return max(-U_MAX, min(U_MAX, u))
 
 
@@ -355,12 +419,15 @@ class LinkManager:
         self.quit = threading.Event()
         self.data = [deque(maxlen=MAX_POINTS) for _ in range(3)]  # theta_p, theta_r, u
         self.ctrl = DualPidController()
+        self.swing_ctrl = SwingUpController()
         self.in_balance = False
         self._reset_pending = False
         # Mode to start when `start_requested` fires. 'B' = PC computes u
-        # (DualPidController, active_control=True). '1' = MCU's own onboard
-        # PID runs the whole session (active_control=False, GUI only observes
-        # the telemetry the firmware already reports for every mode).
+        # once caught (DualPidController, active_control=True), onboard
+        # bang-bang swing-up first. 'C' = PC also drives swing-up from
+        # hang-down (SwingUpController, active_control=True). '1' = MCU's own
+        # onboard PID runs the whole session (active_control=False, GUI only
+        # observes the telemetry the firmware already reports for every mode).
         self.selected_mode = 'B'
         self.active_control = True
         self._log_file = None
@@ -442,6 +509,7 @@ class LinkManager:
         line = self._read_line()
         if not line:
             return
+        print(line)  # otherwise nothing is visible while waiting for reboot
         if PROMPT_TEXT in line:
             self._reset_pending = False
             self._set_state(STATE_AT_PROMPT)
@@ -453,9 +521,10 @@ class LinkManager:
     def _step_at_prompt(self):
         if self.start_requested.is_set():
             self.start_requested.clear()
-            self.active_control = (self.selected_mode == 'B')
+            self.active_control = self.selected_mode in ('B', 'C')
             self.ser.write((self.selected_mode + '\r').encode())
             self.ctrl = DualPidController()
+            self.swing_ctrl.reset()
             self.in_balance = False
             for d in self.data:
                 d.clear()
@@ -523,6 +592,22 @@ class LinkManager:
             return
 
         if abs(theta_p) > PEND_CAPTURE_DEG:
+            if self.selected_mode == 'C':
+                # Still swinging up — Python drives the whole session from
+                # hang-down, so keep pumping instead of giving up.
+                if self.in_balance:
+                    # Was catching, escaped back out — clear catch state,
+                    # keep the swing-up controller's own state as-is.
+                    self.in_balance = False
+                    self.ctrl.reset()
+                u = self.swing_ctrl.compute(theta_p, theta_r)
+                self.ser.write(f'u {u:.1f}\r'.encode())
+                self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u)
+                self.data[0].append(theta_p)
+                self.data[1].append(theta_r)
+                self.data[2].append(u)
+                return
+
             if self.in_balance:
                 self.ser.write(b'u 0.0\r')
             self.in_balance = False
@@ -591,10 +676,36 @@ def run_gui(port: str) -> None:
     mode_frame.pack(side="right", padx=12)
     mode_b_radio = ttk.Radiobutton(mode_frame, text="Mode B (Python PID)",
                                     variable=mode_var, value='B', command=on_mode_change)
+    mode_c_radio = ttk.Radiobutton(mode_frame, text="Mode C (Python swing-up)",
+                                    variable=mode_var, value='C', command=on_mode_change)
     mode_1_radio = ttk.Radiobutton(mode_frame, text="Mode 1 (MCU内蔵PID)",
                                     variable=mode_var, value='1', command=on_mode_change)
     mode_b_radio.pack(side="left")
+    mode_c_radio.pack(side="left")
     mode_1_radio.pack(side="left")
+
+    # --- Swing-up gain panel (Mode C) — live-tunable, no restart needed ---
+    swingup_frame = ttk.LabelFrame(root, text="Swing-up gains (Mode C)", padding=6)
+    swingup_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+    swingup_vars = {key: tk.DoubleVar(value=val) for key, val in SWINGUP_GAINS.items()}
+    swingup_labels = {
+        'Kp_rotor': 'Kp (rotor)', 'Kd_rotor': 'Kd (rotor)',
+        'Kp_pend': 'Kp (pend)', 'Kd_pend': 'Kd (pend)',
+        'near_bottom_deg': '真下しきい値[deg]',
+    }
+    for i, key in enumerate(('Kp_rotor', 'Kd_rotor', 'Kp_pend', 'Kd_pend', 'near_bottom_deg')):
+        ttk.Label(swingup_frame, text=swingup_labels[key]).grid(row=0, column=2 * i, padx=(4, 2), sticky="e")
+        ttk.Entry(swingup_frame, textvariable=swingup_vars[key], width=8).grid(row=0, column=2 * i + 1, padx=(0, 8))
+
+    def apply_swingup_gains():
+        for key, var in swingup_vars.items():
+            try:
+                SWINGUP_GAINS[key] = var.get()
+            except tk.TclError:
+                pass  # invalid entry text — leave that gain unchanged
+
+    ttk.Button(swingup_frame, text="適用", command=apply_swingup_gains).grid(row=0, column=10, padx=8)
 
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
     labels = ["Pendulum Angle [deg]", "Rotor Angle [deg]", "Input u [steps/s²]"]
@@ -618,6 +729,7 @@ def run_gui(port: str) -> None:
         start_btn.state(['!disabled'] if at_prompt else ['disabled'])
         stop_btn.state(['!disabled'] if link.state == STATE_RUNNING else ['disabled'])
         mode_b_radio.state(['!disabled'] if at_prompt else ['disabled'])
+        mode_c_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
 
         for i in range(3):

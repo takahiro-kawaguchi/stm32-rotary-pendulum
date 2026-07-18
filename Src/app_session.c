@@ -87,7 +87,8 @@ void app_run_control_session(AppControlContext *ctx)
 	app_session_wait_pendulum_rest(ctx);
 	app_session_wait_pendulum_upright(ctx);
 	app_session_init_state(ctx);
-	if (ctx->enable_swing_up == 1 && ctx->select_suspended_mode == 0) {
+	if (ctx->enable_swing_up == 1 && ctx->select_suspended_mode == 0
+			&& !ctx->enable_remote_swing_up) {
 		app_run_swing_up(ctx);
 	}
 	app_run_balance_loop(ctx);

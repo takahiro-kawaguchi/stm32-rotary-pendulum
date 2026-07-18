@@ -536,6 +536,8 @@ void user_prompt(void){
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 'B' at prompt for Mode B: PC computes control, sends 'u <steps/s^2>'.. \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Enter 'C' at prompt for Mode C: PC controls swing-up + balance from hang-down.. \n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 1 at prompt for Inverted Pendulum Control............................... \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 2 at prompt for Suspended Pendulum Control.............................. \n\r");
@@ -657,13 +659,14 @@ void user_configuration(AppControlContext *ctx){
 
 			{
 				char sel = ((char *)Msg.Data)[0];
-				if (sel == 'A' || sel == 'B') {
-					ctx->core_controller_ops = (sel == 'B') ? &CONTROLLER_OPS_REMOTE
-					                                        : &CONTROLLER_OPS_DEFAULT;
+				if (sel == 'A' || sel == 'B' || sel == 'C') {
+					ctx->core_controller_ops = (sel == 'A') ? &CONTROLLER_OPS_DEFAULT
+					                                        : &CONTROLLER_OPS_REMOTE;
 					ctx->gains.enable_state_feedback = 0;
 					ctx->select_suspended_mode = 0;
 					ctx->enc_cal.enable_angle_cal = 1;
 					ctx->enable_swing_up = 1;
+					ctx->enable_remote_swing_up = (sel == 'C') ? 1 : 0;
 					ctx->gains.proportional =   PRIMARY_PROPORTIONAL_MODE_1;
 					ctx->gains.integral =       PRIMARY_INTEGRAL_MODE_1;
 					ctx->gains.derivative =     PRIMARY_DERIVATIVE_MODE_1;
@@ -678,9 +681,12 @@ void user_configuration(AppControlContext *ctx){
 					if (sel == 'A') {
 						sprintf(uart_tx_buf,
 							"\n\rMode A: Inverted Pendulum PID. During run: 'r <steps>' sets rotor reference.\r\n");
-					} else {
+					} else if (sel == 'B') {
 						sprintf(uart_tx_buf,
 							"\n\rMode B: Remote Control. During run: 'u <steps/s^2>' sets control output.\r\n");
+					} else {
+						sprintf(uart_tx_buf,
+							"\n\rMode C: Remote Swing-Up + Control. Starts from hang-down; 'u <steps/s^2>' sets control output throughout.\r\n");
 					}
 					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 					break;

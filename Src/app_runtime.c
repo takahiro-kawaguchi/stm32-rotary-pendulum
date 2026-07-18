@@ -15,6 +15,7 @@ int control_execute_cycle(AppControlContext *ctx, int i)
 	if (control_update_state_and_safety(ctx) != 0) {
 		return 1;
 	}
+	control_resolve_upright_crossing_direction(ctx);
 
 	control_update_slope_correction(ctx, i);
 	control_prepare_targets_and_filters(ctx, i);
