@@ -54,23 +54,39 @@ STEPPER_RAD_PER_STEP = 2.0 * math.pi / 3200.0   # 200 steps * 16 µstep
 ENCODER_ANGLE_POLARITY = -1.0                     # physical sign convention
 
 # ---------------------------------------------------------------------------
-# Controller gains
+# Controller gains — two-phase schedule, mirroring the MCU's own behaviour:
+# angle_cal_update()'s i==1 branch (Src/app_runtime.c) injects an aggressive
+# catch-phase controller right as the balance loop starts, then restores the
+# softer PRIMARY/SECONDARY_*_MODE_1 macro gains (300/0/30 pend, 15.0/0.0/7.5
+# rotor, no integral compensator) once its ~60s onboard angle-calibration
+# process completes. Python doesn't run that calibration, so instead of
+# matching its exact duration, CATCH_PHASE_DURATION_S below is chosen from
+# our own logged catches, which settled to near-zero within ~5-7s.
 #
-# These are NOT the edukit_system.h PRIMARY/SECONDARY_*_MODE_1 macros
-# (300/0/30 pend, 15.0/0.0/7.5 rotor) — those only apply before swing-up and
-# again ~26s after balance starts, once angle calibration finishes. The gains
-# actually catching the pendulum right after swing-up come from
-# angle_cal_update()'s i==1 branch (Src/app_runtime.c): Kp_pend=419/Kd_pend=56,
-# Kp_rotor=21.1/Kd_rotor=17.2, PLUS enable_state_feedback=1 and a genuine
-# accumulating integral compensator (gain=10) that this simple PID doesn't
-# implement. Using just the higher P/D values here as a first approximation,
-# without the state-feedback/integral-compensator machinery.
+# Settled on CATCH_GAINS (with the integral compensator on) after
+# ablation-testing all three other combinations on hardware (2026-07-19):
+#   plain macro gains, integral OFF  -> 2/4 catches
+#   these high gains,  integral OFF  -> 1/3 catches, failing FASTER/harder
+#                                       (theta_r ran to +233 deg in ~0.4s
+#                                       both times, u pinned at the U_MAX
+#                                       rail for a long stretch)
+#   these high gains,  integral ON   -> 2/2 catches, theta_r stayed within
+#                                       roughly -66..+20 deg (one hold ran 46s)
+# So it's specifically the integral compensator — not gain magnitude — that
+# keeps the rotor from drifting over repeated catch oscillations; without it,
+# higher P/D gains alone made the rotor excursions worse, not better.
+#
+# STEADY_GAINS (macro defaults, no integral) is untested on its own so far —
+# only ever run as part of the "plain macro gains, integral OFF" ablation
+# above, which was evaluated as a *catch* controller, not as a steady-state
+# holder after CATCH_GAINS has already stabilized the pendulum. Worth
+# watching the first few sessions after this schedule ships in case the
+# switch-down itself introduces a bump.
 # ---------------------------------------------------------------------------
-Kp_pend  = 419.0
-Kd_pend  =  56.0
-Kp_rotor =  21.1
-Ki_rotor =   0.0
-Kd_rotor =  17.2
+CATCH_PHASE_DURATION_S = 10.0
+
+CATCH_GAINS = dict(Kp_pend=419.0, Kd_pend=56.0, Kp_rotor=21.1, Kd_rotor=17.2, Ki_comp=10.0)
+STEADY_GAINS = dict(Kp_pend=300.0, Kd_pend=30.0, Kp_rotor=15.0, Kd_rotor=7.5, Ki_comp=0.0)
 
 # ---------------------------------------------------------------------------
 # Derivative IIR low-pass filter coefficients
@@ -116,14 +132,14 @@ PEND_CAPTURE_DEG =  60.0
 U_MAX = 131071.0
 
 # ---------------------------------------------------------------------------
-# Rotor reference (steps from centre) and state-feedback / integral
-# compensator params, matching angle_cal_update()'s i==1 catch-phase setup
-# (Src/app_runtime.c): rotor_position_command_steps=0, feedforward_gain=1,
-# integral_compensator_gain=10.
+# Rotor reference (steps from centre) and feedforward gain, matching
+# angle_cal_update()'s i==1 catch-phase setup (Src/app_runtime.c):
+# rotor_position_command_steps=0, feedforward_gain=1. The integral
+# compensator's own gain is scheduled per-phase — see CATCH_GAINS/
+# STEADY_GAINS['Ki_comp'] above.
 # ---------------------------------------------------------------------------
 rotor_ref_steps = 0.0
 FEEDFORWARD_GAIN = 1.0
-INTEGRAL_COMPENSATOR_GAIN = 10.0
 
 
 class DualPidController:
@@ -137,13 +153,26 @@ class DualPidController:
         self._prev_er = 0.0
         self._rotor_integral = 0.0   # accumulating state-feedback integral (rotor position, steps)
         self._ts = _TS
+        self._catch_start_time = time.time()
 
     def reset(self):
+        """Clears PID/filter state. Does NOT touch the catch-phase
+        gain-schedule timer — this is also called at swing-up-start (well
+        before any real telemetry/control begins), so restarting the timer
+        here would let it expire during swing-up itself. Call start_catch()
+        separately, exactly when actually entering/re-entering the capture
+        zone."""
         self._pend_state  = [0.0, 0.0]
         self._rotor_state = [0.0, 0.0]
         self._prev_ep = 0.0
         self._prev_er = 0.0
         self._rotor_integral = 0.0
+
+    def start_catch(self):
+        """Marks 'now' as the start of a catch attempt for the gain-schedule
+        timer. Call whenever actually entering/re-entering the capture zone
+        (i.e. right before computing/sending real corrective u values)."""
+        self._catch_start_time = time.time()
 
     def _pid_execute(self, Kp, Ki, Kd, error, prev_error, state, lpf):
         """One-step PID with first-order IIR LPF on derivative.
@@ -158,13 +187,16 @@ class DualPidController:
 
     def compute(self, theta_p_deg: float, theta_r_deg: float,
                 rotor_ref: float = 0.0) -> float:
+        in_catch_phase = (time.time() - self._catch_start_time) < CATCH_PHASE_DURATION_S
+        gains = CATCH_GAINS if in_catch_phase else STEADY_GAINS
+
         theta_p = math.radians(theta_p_deg)
         theta_r = math.radians(theta_r_deg)
 
         # Primary PID: pendulum
         e_p = ENCODER_ANGLE_POLARITY * theta_p / STEPPER_RAD_PER_STEP
         u_pend = self._pid_execute(
-            Kp_pend, 0.0, Kd_pend,
+            gains['Kp_pend'], 0.0, gains['Kd_pend'],
             e_p, self._prev_ep, self._pend_state, _LP_PEND)
         self._prev_ep = e_p
 
@@ -172,7 +204,7 @@ class DualPidController:
         theta_r_steps = theta_r / STEPPER_RAD_PER_STEP
         e_r = theta_r_steps - rotor_ref
         u_rotor = self._pid_execute(
-            Kp_rotor, Ki_rotor, Kd_rotor,
+            gains['Kp_rotor'], 0.0, gains['Kd_rotor'],
             e_r, self._prev_er, self._rotor_state, _LP_ROTOR)
         self._prev_er = e_r
 
@@ -180,7 +212,7 @@ class DualPidController:
         # whenever integral_compensator_gain != 0 — replaces, not adds to,
         # the plain feedforward term used when it's 0.
         self._rotor_integral += (rotor_ref * FEEDFORWARD_GAIN - theta_r_steps) * self._ts
-        u = u_pend + u_rotor - INTEGRAL_COMPENSATOR_GAIN * self._rotor_integral
+        u = u_pend + u_rotor - gains['Ki_comp'] * self._rotor_integral
         return max(-U_MAX, min(U_MAX, u))
 
 
@@ -261,6 +293,7 @@ def run_cli(ser: serial.Serial) -> None:
             # position so derivative starts at 0 (avoids startup spike)
             if not in_balance:
                 ctrl.reset()
+                ctrl.start_catch()
                 # Prime prev_error to current error so first diff = 0
                 theta_p_rad = math.radians(theta_p)
                 theta_r_rad = math.radians(theta_r)
@@ -498,6 +531,7 @@ class LinkManager:
 
         if not self.in_balance:
             self.ctrl.reset()
+            self.ctrl.start_catch()
             theta_p_rad = math.radians(theta_p)
             theta_r_rad = math.radians(theta_r)
             self.ctrl._prev_ep = ENCODER_ANGLE_POLARITY * theta_p_rad / STEPPER_RAD_PER_STEP
