@@ -26,6 +26,14 @@ uint16_t Extract_Msg(uint8_t *CircularBuff, uint16_t StartPos, uint16_t LastPos,
 
 		if (Data == SERIAL_MSG_EOF) {
 			Msg->Len = MsgIdx;
+			/* Msg->Data is a single reused global buffer (Src/main.c) — without
+			 * a null terminator here, a short message following a longer one
+			 * (e.g. "q" right after "u -692.3") leaves stale trailing bytes
+			 * that break any strcpy/strcmp treating Msg->Data as a C string
+			 * (see ui_process_runtime_input()'s "q" check, Src/ui.c). */
+			if (MsgIdx < SERIAL_MSG_MAXLEN) {
+				Msg->Data[MsgIdx] = '\0';
+			}
 			return MsgIdx + 1;
 		} else {
 			Msg->Data[MsgIdx] = Data;
