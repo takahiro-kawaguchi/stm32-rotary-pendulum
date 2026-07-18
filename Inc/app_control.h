@@ -7,6 +7,11 @@
 #include "command_shaper.h"
 #include "edukit_system.h"
 
+/* Diagnostic (Mode D, see Src/ui.c): 500Hz / 5 = 100Hz, matching the rate
+ * report_telemetry() (Src/app_runtime.c) already decimates to and thus what
+ * a PC-side remote controller actually sees/reacts to each update. */
+#define CONTROL_DECIMATION_FACTOR 5
+
 typedef struct {
 	float proportional;
 	float integral;
@@ -121,6 +126,7 @@ typedef struct AppControlContext {
 	int   select_suspended_mode;
 	int   enable_swing_up;
 	int   enable_remote_swing_up;
+	int   enable_decimated_control;
 	uint32_t enable_control_action;
 	int   enable_adaptive_mode;
 	int   adaptive_state;

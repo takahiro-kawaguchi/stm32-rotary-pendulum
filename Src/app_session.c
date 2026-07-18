@@ -441,6 +441,29 @@ static void app_run_balance_loop(AppControlContext *ctx)
 
 	app_init_control_pipeline(ctx, ctx->enc_cal.encoder_position_init, ctx->timing.t_sample_s);
 
+	/* Mode D only: controller_init() (just above, including its derivative
+	 * low-pass filter coefficients) and t_sample_rotor_s (set once at boot,
+	 * Src/app_bootstrap.c) both assume control_update_dual_pid() runs every
+	 * cycle. It only runs every CONTROL_DECIMATION_FACTOR-th cycle here
+	 * (Src/app_runtime.c), so re-init the controller with the true elapsed
+	 * period between calls instead of the base cycle time — otherwise the
+	 * derivative term is CONTROL_DECIMATION_FACTOR times too large (dividing
+	 * a 10ms angle change by an assumed 2ms) and the response runs away. */
+	if (ctx->enable_decimated_control) {
+		PidGains active_gains;
+		active_gains.Kp_pend  = ctx->core_ctl_state.PID_Pend.Kp;
+		active_gains.Ki_pend  = ctx->core_ctl_state.PID_Pend.Ki;
+		active_gains.Kd_pend  = ctx->core_ctl_state.PID_Pend.Kd;
+		active_gains.Kp_rotor = ctx->core_ctl_state.PID_Rotor.Kp;
+		active_gains.Ki_rotor = ctx->core_ctl_state.PID_Rotor.Ki;
+		active_gains.Kd_rotor = ctx->core_ctl_state.PID_Rotor.Kd;
+		ctx->core_controller_ops->init(&ctx->core_ctl_state, &active_gains,
+				ctx->timing.t_sample_s * CONTROL_DECIMATION_FACTOR);
+		ctx->timing.t_sample_rotor_s = ctx->timing.t_sample_s * CONTROL_DECIMATION_FACTOR;
+	} else {
+		ctx->timing.t_sample_rotor_s = ctx->timing.t_sample_s;
+	}
+
 	while (ctx->enable_control_action == 1) {
 		ret = control_handle_runtime_configuration(ctx, i);
 		if (ret < 0) {

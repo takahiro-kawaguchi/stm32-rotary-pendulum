@@ -538,6 +538,8 @@ void user_prompt(void){
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 'C' at prompt for Mode C: PC controls swing-up + balance from hang-down.. \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+	sprintf(uart_tx_buf, "Enter 'D' at prompt for Mode D: Onboard PID, control decimated to ~100Hz..... \n\r");
+	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 1 at prompt for Inverted Pendulum Control............................... \n\r");
 	HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	sprintf(uart_tx_buf, "Enter 2 at prompt for Suspended Pendulum Control.............................. \n\r");
@@ -659,14 +661,21 @@ void user_configuration(AppControlContext *ctx){
 
 			{
 				char sel = ((char *)Msg.Data)[0];
-				if (sel == 'A' || sel == 'B' || sel == 'C') {
-					ctx->core_controller_ops = (sel == 'A') ? &CONTROLLER_OPS_DEFAULT
-					                                        : &CONTROLLER_OPS_REMOTE;
+				if (sel == 'A' || sel == 'B' || sel == 'C' || sel == 'D') {
+					ctx->core_controller_ops = (sel == 'B' || sel == 'C') ? &CONTROLLER_OPS_REMOTE
+					                                                     : &CONTROLLER_OPS_DEFAULT;
 					ctx->gains.enable_state_feedback = 0;
 					ctx->select_suspended_mode = 0;
 					ctx->enc_cal.enable_angle_cal = 1;
 					ctx->enable_swing_up = 1;
 					ctx->enable_remote_swing_up = (sel == 'C') ? 1 : 0;
+					/* Diagnostic only (2026-07-19): Mode D is otherwise identical to
+					 * Mode A (onboard PID), except control_update_dual_pid() only
+					 * recomputes every CONTROL_DECIMATION_FACTOR-th cycle instead of
+					 * every cycle — matching Mode B's real 100Hz-telemetry/500Hz-
+					 * actuation split, to test whether Mode B's catch reliability gap
+					 * vs Mode 1 is explained by that rate difference alone. */
+					ctx->enable_decimated_control = (sel == 'D') ? 1 : 0;
 					ctx->gains.proportional =   PRIMARY_PROPORTIONAL_MODE_1;
 					ctx->gains.integral =       PRIMARY_INTEGRAL_MODE_1;
 					ctx->gains.derivative =     PRIMARY_DERIVATIVE_MODE_1;
@@ -684,9 +693,12 @@ void user_configuration(AppControlContext *ctx){
 					} else if (sel == 'B') {
 						sprintf(uart_tx_buf,
 							"\n\rMode B: Remote Control. During run: 'u <steps/s^2>' sets control output.\r\n");
-					} else {
+					} else if (sel == 'C') {
 						sprintf(uart_tx_buf,
 							"\n\rMode C: Remote Swing-Up + Control. Starts from hang-down; 'u <steps/s^2>' sets control output throughout.\r\n");
+					} else {
+						sprintf(uart_tx_buf,
+							"\n\rMode D: Onboard PID, control update decimated to ~100Hz (diagnostic).\r\n");
 					}
 					HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 					break;

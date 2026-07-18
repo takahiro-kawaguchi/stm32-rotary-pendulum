@@ -21,7 +21,13 @@ int control_execute_cycle(AppControlContext *ctx, int i)
 	control_prepare_targets_and_filters(ctx, i);
 
 	if (ENABLE_DUAL_PID == 1) {
-		control_update_dual_pid(ctx);
+		if (!ctx->enable_decimated_control || i % CONTROL_DECIMATION_FACTOR == 0) {
+			control_update_dual_pid(ctx);
+		}
+		/* else: leave ctx->core_ctl_out / rotor_control_target_steps at their
+		 * last computed value — control_finalize_command_and_actuate() below
+		 * still actuates every cycle either way, exactly mirroring how Mode B
+		 * holds the last PC-supplied 'u' between telemetry-rate updates. */
 	}
 	control_finalize_command_and_actuate(ctx, i);
 	report_telemetry(ctx, i);
