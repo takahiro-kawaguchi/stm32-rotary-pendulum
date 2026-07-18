@@ -32,6 +32,7 @@ GUI mode (--gui):
 import argparse
 import csv
 import math
+import os
 import sys
 import threading
 import time
@@ -563,7 +564,8 @@ def run_gui(port: str) -> None:
     print(f"Connected: {port}  {BAUD} baud")
 
     link = LinkManager(ser)
-    threading.Thread(target=link.run, daemon=True).start()
+    link_thread = threading.Thread(target=link.run, daemon=True)
+    link_thread.start()
 
     root = tk.Tk()
     root.title("STM32 Pendulum — Remote Controller")
@@ -607,7 +609,10 @@ def run_gui(port: str) -> None:
     canvas = FigureCanvasTkAgg(fig, master=root)
     canvas.get_tk_widget().pack(fill="both", expand=True)
 
+    tick_after_id = None
+
     def tick():
+        nonlocal tick_after_id
         status_var.set(link.status_text)
         at_prompt = link.state == STATE_AT_PROMPT
         start_btn.state(['!disabled'] if at_prompt else ['disabled'])
@@ -622,18 +627,36 @@ def run_gui(port: str) -> None:
         canvas.draw_idle()
 
         if not link.quit.is_set():
-            root.after(100, tick)
+            tick_after_id = root.after(100, tick)
 
     def on_close():
         link.quit.set()
+        if tick_after_id is not None:
+            # Cancel the pending tick() call — otherwise Tk still tries to
+            # fire it after root.destroy() below, which raises "invalid
+            # command name ...tick" since the interpreter is already gone.
+            root.after_cancel(tick_after_id)
         if link.state == STATE_RUNNING:
             link.stop_requested.set()
         time.sleep(0.2)
+
+        # Wait for the background thread to actually stop touching `ser`
+        # before closing it — closing a port while another thread is
+        # blocked inside ser.readline() on it is not safe on Windows and
+        # can leave that thread (and the whole process) stuck forever.
+        link_thread.join(timeout=2.0)
         try:
             ser.close()
         except Exception:
             pass
         root.destroy()
+
+        # Safety net: if anything (a lingering Tcl/matplotlib timer, a
+        # daemon thread wedged in a blocking OS call, etc.) is still
+        # keeping the interpreter alive at this point, force the process
+        # to exit rather than leave the terminal hung with no window to
+        # show for it.
+        os._exit(0)
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     tick()
