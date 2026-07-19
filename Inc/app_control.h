@@ -152,7 +152,6 @@ void app_init_control_pipeline(AppControlContext *ctx, int encoder_init_counts,
 void control_shutdown_sequence(AppControlContext *ctx);
 int control_handle_runtime_configuration(AppControlContext *ctx, int i);
 int control_update_state_and_safety(AppControlContext *ctx);
-void control_resolve_upright_crossing_direction(AppControlContext *ctx);
 void control_update_slope_correction(AppControlContext *ctx, int i);
 void control_update_dual_pid(AppControlContext *ctx);
 void control_finalize_command_and_actuate(AppControlContext *ctx, int i);

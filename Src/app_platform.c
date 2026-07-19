@@ -1,5 +1,7 @@
 #include "main.h"
 #include "edukit_system.h"
+#include <stdio.h>
+#include <string.h>
 
 volatile uint16_t gLastError;
 
@@ -105,10 +107,21 @@ void MX_USART2_UART_Init(void) {
 	__HAL_LINKDMA(&huart2, hdmarx, hdma_usart2_rx);
 }
 
+/* L6474 FLAG-pin ISR (attached in app_bootstrap.c). Every branch below was
+ * an empty stub -- any fault the driver reported here was silently
+ * discarded. In particular L6474_STATUS_HIZ means the driver has put its
+ * output bridge into high-impedance (motor electrically disconnected from
+ * drive) while the rest of the firmware keeps computing/echoing u as if
+ * nothing happened. That's a strong candidate for "commands are accepted
+ * and reported back correctly but the rotor never physically turns" --
+ * logging here (2026-07-19) so the next occurrence shows exactly which
+ * condition tripped instead of leaving it a total mystery. */
 void MyFlagInterruptHandler(void) {
 	uint16_t statusRegister = BSP_MotorControl_CmdGetStatus(0);
 
 	if ((statusRegister & L6474_STATUS_HIZ) == L6474_STATUS_HIZ) {
+		sprintf(uart_tx_buf, "L6474 FLAG: HIZ (output disabled) status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_DIR) == L6474_STATUS_DIR) {
@@ -117,21 +130,33 @@ void MyFlagInterruptHandler(void) {
 
 	if ((statusRegister & L6474_STATUS_NOTPERF_CMD)
 			== L6474_STATUS_NOTPERF_CMD) {
+		sprintf(uart_tx_buf, "L6474 FLAG: command not performed status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_WRONG_CMD) == L6474_STATUS_WRONG_CMD) {
+		sprintf(uart_tx_buf, "L6474 FLAG: wrong command status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_UVLO) == 0) {
+		sprintf(uart_tx_buf, "L6474 FLAG: under-voltage lockout status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_TH_WRN) == 0) {
+		sprintf(uart_tx_buf, "L6474 FLAG: thermal warning status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_TH_SD) == 0) {
+		sprintf(uart_tx_buf, "L6474 FLAG: thermal shutdown status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 
 	if ((statusRegister & L6474_STATUS_OCD) == 0) {
+		sprintf(uart_tx_buf, "L6474 FLAG: over-current detected status=0x%04X\r\n", statusRegister);
+		HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
 	}
 }
 

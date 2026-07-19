@@ -323,6 +323,10 @@ static void app_run_swing_up(AppControlContext *ctx)
 	motorDir_t swing_up_direction;
 	int swing_up_state;
 	int stage_count, stage_amp;
+	int swing_up_cycle = 0;
+	int rotor_position_steps = 0;
+	float theta_p_deg_prev = 0.0f;
+	float theta_r_deg_prev = 0.0f;
 
 	ctx->core_ctl_state.PID_Rotor.Kp = 20;
 	ctx->core_ctl_state.PID_Rotor.Ki = 10;
@@ -354,12 +358,53 @@ static void app_run_swing_up(AppControlContext *ctx)
 	BSP_MotorControl_Move(0, swing_up_direction, 150);
 	BSP_MotorControl_WaitWhileActive(0);
 
+	/* Prime the previous-sample values so the first telemetry line's
+	 * omega_p/omega_r aren't a bogus spike against the 0.0f initializers
+	 * above. */
+	ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
+			ctx->enc_cal.encoder_position_init, &htim3);
+	theta_p_deg_prev = (float) (ctx->enc_cal.encoder_position_steps
+			- ctx->enc_cal.encoder_position_down) / ctx->angle_scale;
+	hardware_rotor_position_read(&rotor_position_steps);
+	theta_r_deg_prev = (float) rotor_position_steps / STEPPER_READ_POSITION_STEPS_PER_DEGREE;
+
 	while (1) {
 		SwingUpSensorState sus;
 		HAL_Delay(2);
 		ret = hardware_encoder_position_read(&ctx->enc_cal.encoder_position_steps,
 				ctx->enc_cal.encoder_position_init, &htim3);
 		hardware_swing_up_get(&sus);
+
+		/* Swing-up doesn't run through the observer (control_update_state_
+		 * and_safety()/report_telemetry(), Src/app_control.c, Src/app_runtime.c),
+		 * so build the same 6-field CSV line here instead, at roughly the same
+		 * ~100Hz rate. theta_p_deg is relative to encoder_position_down (0 =
+		 * hang-down), NOT yet corrected to 0 = upright the way the balance
+		 * loop's telemetry is — that correction (below) only happens once the
+		 * upright crossing is actually detected, so expect a ~180/360 deg
+		 * jump in the log right at the swing-up -> balance handoff if the
+		 * pendulum approaches from the "negative" side. */
+		swing_up_cycle++;
+		if (swing_up_cycle % 5 == 0) {
+			float theta_p_deg = (float) (ctx->enc_cal.encoder_position_steps
+					- ctx->enc_cal.encoder_position_down) / ctx->angle_scale;
+			float theta_r_deg;
+			float omega_p_deg_s, omega_r_deg_s;
+			const float dt_s = 0.002f * 5.0f;
+
+			hardware_rotor_position_read(&rotor_position_steps);
+			theta_r_deg = (float) rotor_position_steps / STEPPER_READ_POSITION_STEPS_PER_DEGREE;
+
+			omega_p_deg_s = (theta_p_deg - theta_p_deg_prev) / dt_s;
+			omega_r_deg_s = (theta_r_deg - theta_r_deg_prev) / dt_s;
+			theta_p_deg_prev = theta_p_deg;
+			theta_r_deg_prev = theta_r_deg;
+
+			sprintf(uart_tx_buf, "%i,%.3f,%.3f,%.3f,%.3f,%.1f\r\n",
+					swing_up_cycle, theta_p_deg, theta_r_deg, omega_p_deg_s, omega_r_deg_s,
+					(float) (swing_up_direction == FORWARD ? stage_amp : -stage_amp));
+			HAL_UART_Transmit(&huart2, (uint8_t*) uart_tx_buf, strlen(uart_tx_buf), HAL_MAX_DELAY);
+		}
 
 		if (fabs(
 				ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down

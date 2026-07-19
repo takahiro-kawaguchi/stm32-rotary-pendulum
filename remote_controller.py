@@ -120,6 +120,36 @@ ROTOR_LIMIT_DEG  = 200.0    # send u=0 when rotor exceeds this
 # cut off early. Widened to give oscillations more room to damp out.
 PEND_CAPTURE_DEG =  60.0
 
+# Mode C only: GUI-tunable margin (degrees) for LinkManager.origin_mode's
+# down/up switch -- how close to upright before Python starts treating "up"
+# as its origin instead of "down". A dict (like SWINGUP_PARAMS below) so the
+# GUI's Apply button can mutate it in place with no `global` needed; read
+# directly by the background link thread, matching that same pattern.
+# Independent of PEND_CAPTURE_DEG above (Mode B's actual capture-zone
+# threshold) -- start narrow since this only drives a display switch for now
+# and a wide margin would flip it well before the pendulum is genuinely near
+# upright.
+ORIGIN_MODE_THRESHOLD = dict(deg=10.0)
+
+# Mode C only: hardware sanity-check pulse fired once at the very start of
+# every session (LinkManager._startup_kick_done) -- a small, brief 'u' held
+# for STARTUP_KICK_DURATION_S, before any origin_mode/capture logic runs,
+# purely to see quickly (via theta_r in the log/plot) whether the rotor
+# physically responds at all this session, independent of any control law.
+STARTUP_KICK_U = 1500.0
+STARTUP_KICK_DURATION_S = 0.15
+
+# u is an acceleration, not a stop command -- dropping straight to u=0 after
+# the kick above leaves the rotor coasting at whatever velocity it picked up
+# instead of stopping, let alone returning to where it started. This phase
+# runs right after the kick and drives the rotor back toward its start
+# position with a small P(D) on theta_r/omega_r (both already in the
+# telemetry, no extra derivative needed) instead of leaving it to wander.
+STARTUP_RETURN_DURATION_S = 2.0
+STARTUP_RETURN_KP = 300.0    # u per degree of rotor position error
+STARTUP_RETURN_KD = 100.0    # u per (deg/s) of rotor velocity
+STARTUP_RETURN_U_MAX = 8000.0
+
 # steps/s^2, hard clip on total output. Matches HW_MAXIMUM_ACCELERATION /
 # HW_MAXIMUM_DECELERATION (Src/hardware.c) — the real physical ceiling
 # apply_acceleration() clamps to on the MCU regardless of requested value.
@@ -216,8 +246,12 @@ class DualPidController:
         return pid_execute(Kp, Ki, Kd, error, prev_error, state, lpf, self._ts)
 
     def compute(self, theta_p_deg: float, theta_r_deg: float,
-                rotor_ref: float = 0.0) -> float:
-        in_catch_phase = (time.time() - self._catch_start_time) < CATCH_PHASE_DURATION_S
+                rotor_ref: float = 0.0, force_steady: bool = False) -> float:
+        """force_steady: skip the CATCH_GAINS phase and use STEADY_GAINS from
+        the first sample — Mode C's up-mode control uses this; Mode B leaves
+        it False to keep its existing (well-tuned) catch/steady schedule."""
+        in_catch_phase = (not force_steady
+                and (time.time() - self._catch_start_time) < CATCH_PHASE_DURATION_S)
         gains = CATCH_GAINS if in_catch_phase else STEADY_GAINS
 
         theta_p = math.radians(theta_p_deg)
@@ -266,62 +300,157 @@ class DualPidController:
 
 
 # ---------------------------------------------------------------------------
-# Swing-up gains (Mode C). Ported from STM32pendulum's gui_tool branch
-# (Src/main.c there): a plain rotor-position PD pumps energy into the
-# pendulum every cycle; a pendulum-angle PD term is added on top only near
-# the bottom (within SWINGUP_GAINS['near_bottom_deg'] of hanging straight
-# down, i.e. theta_p_deg near +-180) to help phase-sync the push with the
-# pendulum's own swing. That branch left all swing-up gains at 0 by default
-# and tuned them live via serial commands from its GUI — there is no
-# known-good starting point to port numerically, so these start at 0 too and
-# are meant to be tuned live from this script's GUI (see run_gui()). All in
-# one dict so the GUI can mutate values in place with no `global` needed.
+# Swing-up parameters (Mode C). Ported from the onboard bang-bang algorithm
+# that Mode 1/A/B already run successfully (app_run_swing_up(),
+# Src/app_session.c, plus the hardware_swing_up_*() zero-crossing/peak
+# tracking it depends on, Src/hardware.c:207-246,295-336) instead of the
+# earlier from-scratch PD energy-pump port (STM32pendulum's gui_tool
+# branch), which had no known-good gains and proved very hard to tune from
+# zero after hours of real testing.
+#
+# The firmware version drives the rotor with BSP_MotorControl_Move(), which
+# precomputes a full accel/cruise/decel speed profile sized so velocity is
+# already back to exactly 0 the instant it reaches the target step count
+# (Drivers/BSP/Components/l6474/l6474.c:858, L6474_ComputeSpeedProfile()) --
+# an open-loop trajectory, not a feedback loop. This script only has an
+# acceleration command (u), so the closest equivalent is a real closed-loop
+# rotor-position PID (rotor_kp/ki/kd below) that runs continuously and holds
+# at whatever target the zero-crossing logic last set -- the first version
+# here instead handed off to u=0 once "close enough" to the target, which
+# left the rotor coasting well past it under its own momentum (same root
+# cause as needing STARTUP_RETURN_* after STARTUP_KICK). A continuously
+# running PID brakes and holds instead of ever going open-loop.
+#
+# stage*_deg / *_threshold_deg are the firmware's STAGE_0/1/2_AMP (200/130/
+# 120 steps, plus the initial 150-step priming push) and 600/1000-count
+# amplitude thresholds, converted to degrees via STEPPER_RAD_PER_STEP and
+# ENCODER_READ_ANGLE_SCALE=6.666667 counts/deg (Inc/edukit_system.h) -- real
+# values already proven on this hardware. rotor_kp/ki/kd/rotor_u_max had
+# nothing to port from; rotor_kp=1500/rotor_u_max=20000 (2026-07-19) is the
+# first combination that reliably swung all the way up on real hardware --
+# a faster/firmer rotor response was needed so the software move keeps up
+# with L6474_ComputeSpeedProfile()'s near-instant one as swing amplitude
+# (and therefore bottom-crossing speed) grows; weaker gains plateaued around
+# +-120 deg instead of reaching upright.
 # ---------------------------------------------------------------------------
-SWINGUP_GAINS = dict(Kp_rotor=0.0, Kd_rotor=0.0, Kp_pend=0.0, Kd_pend=0.0,
-                      near_bottom_deg=10.0)
+SWINGUP_PARAMS = dict(
+    stage0_deg=22.5, stage1_deg=14.625, stage2_deg=13.5,
+    stage1_threshold_deg=90.0, stage2_threshold_deg=150.0,
+    rotor_kp=1500.0, rotor_ki=50.0, rotor_kd=150.0, rotor_u_max=20000.0,
+)
 
 
 class SwingUpController:
-    """Energy-pump swing-up policy for Mode C. Active while |theta_p| is far
-    from upright; LinkManager hands off to DualPidController once within
-    PEND_CAPTURE_DEG."""
+    """Bang-bang swing-up policy for Mode C, ported from the onboard
+    algorithm (see SWINGUP_PARAMS comment above). Active while origin_mode
+    is 'down'; LinkManager hands off to DualPidController once origin_mode
+    flips to 'up'.
+
+    Unlike everywhere else in this file, compute()'s theta_p_deg is 0 = hang
+    down (matching the onboard swing-up telemetry's own convention, see
+    Src/app_session.c's dedicated print block) rather than the usual 0 =
+    upright. LinkManager passes it straight through unconverted.
+
+    Every sample does two independent things:
+      - A rotor-position PID continuously drives/holds the rotor at
+        self._rotor_target_deg (updated below, not a one-shot burst).
+      - theta_p is watched for a zero-crossing (pendulum passing back
+        through hang-down -- bumps the target by the current stage amplitude
+        in the current direction) or a peak (this half-swing's amplitude
+        stopped growing -- flips the direction for the next zero-crossing).
+    """
 
     def __init__(self):
-        self._pend_state  = [0.0, 0.0]
-        self._rotor_state = [0.0, 0.0]
-        self._prev_ep = 0.0
-        self._prev_er = 0.0
         self._ts = _TS
+        self.reset()
 
     def reset(self):
-        self._pend_state  = [0.0, 0.0]
-        self._rotor_state = [0.0, 0.0]
-        self._prev_ep = 0.0
-        self._prev_er = 0.0
+        self._direction = 1.0     # +1/-1, flips on each detected peak
+        self._stage_amp_deg = SWINGUP_PARAMS['stage0_deg']
+        self._stage_count = 0
+        self._prev_theta_p = None
+        self._peaked = False
+        self._handled_peak = False
+        self._max_deg = 0.0            # "still growing since last peak handled" tracker
+        self._global_max_deg = 0.0     # this half-swing's largest |theta_p|
+        self._prev_global_max_deg = 0.0
+        self._rotor_target_deg = None  # set on first compute() call below
+        self._rotor_integral = 0.0
 
-    def compute(self, theta_p_deg: float, theta_r_deg: float) -> float:
-        theta_p = math.radians(theta_p_deg)
-        theta_r = math.radians(theta_r_deg)
+    def compute(self, theta_p_deg: float, theta_r_deg: float,
+                omega_r_deg: float = 0.0) -> float:
+        """theta_p_deg: 0 = hang down (see class docstring)."""
+        p = SWINGUP_PARAMS
 
-        # Rotor-position PD: regulates rotor to center. Runs every cycle
-        # regardless of pendulum position — this IS the swing-up energy pump.
-        e_r = theta_r / STEPPER_RAD_PER_STEP
-        u_rotor = pid_execute(
-            SWINGUP_GAINS['Kp_rotor'], 0.0, SWINGUP_GAINS['Kd_rotor'],
-            e_r, self._prev_er, self._rotor_state, _LP_ROTOR, self._ts)
-        self._prev_er = e_r
+        if self._rotor_target_deg is None:
+            # Mirrors app_run_swing_up()'s initial BSP_MotorControl_Move(0,
+            # FORWARD, 150) priming push before its own main loop starts --
+            # without this the pendulum just hangs at rest and no
+            # zero-crossing ever happens.
+            self._rotor_target_deg = theta_r_deg + self._direction * 16.875
+        if self._prev_theta_p is None:
+            self._prev_theta_p = theta_p_deg
 
-        # Pendulum-angle PD: always computed (so its derivative filter state
-        # stays warm), only added to the output near the bottom.
-        e_p = ENCODER_ANGLE_POLARITY * theta_p / STEPPER_RAD_PER_STEP
-        u_pend = pid_execute(
-            SWINGUP_GAINS['Kp_pend'], 0.0, SWINGUP_GAINS['Kd_pend'],
-            e_p, self._prev_ep, self._pend_state, _LP_PEND, self._ts)
-        self._prev_ep = e_p
+        # hardware_encoder_position_read()'s zero-crossing/peak bookkeeping
+        # (Src/hardware.c:226-241), sampled at Python's 100Hz instead of the
+        # MCU's 500Hz -- fine here since a swing half-period is hundreds of
+        # ms. Runs every sample now (not gated behind a "move in progress"
+        # phase) since the rotor PID below never goes open-loop.
+        zero_crossed = (theta_p_deg > 0) != (self._prev_theta_p > 0)
+        if zero_crossed:
+            self._peaked = False
 
-        near_bottom = abs(abs(theta_p_deg) - 180.0) < SWINGUP_GAINS['near_bottom_deg']
-        u = (u_pend + u_rotor) if near_bottom else u_rotor
-        return max(-U_MAX, min(U_MAX, u))
+        if not self._peaked:
+            if abs(theta_p_deg) >= abs(self._global_max_deg):
+                self._global_max_deg = theta_p_deg
+            if abs(theta_p_deg) >= abs(self._max_deg):
+                self._max_deg = theta_p_deg
+            else:
+                self._peaked = True
+                self._handled_peak = False
+
+        self._prev_theta_p = theta_p_deg
+
+        if zero_crossed:
+            self._stage_count += 1
+            if (self._prev_global_max_deg != self._global_max_deg
+                    and self._stage_count > 4):
+                amp = abs(self._global_max_deg)
+                if amp < p['stage1_threshold_deg']:
+                    self._stage_amp_deg = p['stage0_deg']
+                elif amp < p['stage2_threshold_deg']:
+                    self._stage_amp_deg = p['stage1_deg']
+                else:
+                    self._stage_amp_deg = p['stage2_deg']
+            self._prev_global_max_deg = self._global_max_deg
+            self._global_max_deg = 0.0
+            self._rotor_target_deg = theta_r_deg + self._direction * self._stage_amp_deg
+
+        if self._peaked and not self._handled_peak:
+            self._handled_peak = True
+            self._max_deg = 0.0
+            self._direction = -self._direction
+
+        # Rotor-position PID, continuously driving/holding at
+        # self._rotor_target_deg. Anti-windup (conditional integration,
+        # same pattern as DualPidController.compute()): only accumulate
+        # while not already saturated in the direction that would push
+        # further.
+        error = theta_r_deg - self._rotor_target_deg
+        u_before_step = (-p['rotor_kp'] * error - p['rotor_kd'] * omega_r_deg
+                          - p['rotor_ki'] * self._rotor_integral)
+        integral_step = error * self._ts
+        delta_u = -p['rotor_ki'] * integral_step
+        saturated_same_direction = (
+            (u_before_step >= p['rotor_u_max'] and delta_u > 0) or
+            (u_before_step <= -p['rotor_u_max'] and delta_u < 0)
+        )
+        if not saturated_same_direction:
+            self._rotor_integral += integral_step
+
+        u = (-p['rotor_kp'] * error - p['rotor_kd'] * omega_r_deg
+             - p['rotor_ki'] * self._rotor_integral)
+        return max(-p['rotor_u_max'], min(p['rotor_u_max'], u))
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +583,7 @@ class LinkManager:
         self.start_requested = threading.Event()
         self.stop_requested = threading.Event()
         self.quit = threading.Event()
-        self.data = [deque(maxlen=MAX_POINTS) for _ in range(3)]  # theta_p, theta_r, u
+        self.data = [deque(maxlen=MAX_POINTS) for _ in range(4)]  # theta_p, theta_r, u, theta_p_upright
         self.ctrl = DualPidController()
         self.swing_ctrl = SwingUpController()
         self.in_balance = False
@@ -473,6 +602,16 @@ class LinkManager:
         # observes the telemetry the firmware already reports for every mode).
         self.selected_mode = 'B'
         self.active_control = True
+        # Mode C only: which origin frame the GUI should currently show,
+        # 'down' (0 = hang down) or 'up' (0 = upright) -- see _step_running().
+        self.origin_mode = 'down'
+        # Mode C only: fires a short, fixed test pulse at the very start of
+        # each session (see _step_running()) to quickly confirm the rotor
+        # physically responds at all in *this* session, independent of
+        # origin_mode/capture logic -- a hardware sanity check to rule in/out
+        # the driver before trusting a longer swing-up attempt.
+        self._startup_kick_done = True
+        self._startup_kick_start = None
         self._log_file = None
         self._log_writer = None
         self._log_start_time = 0.0
@@ -487,7 +626,8 @@ class LinkManager:
         self._log_file = open(path, 'w', newline='')
         self._log_writer = csv.writer(self._log_file)
         self._log_writer.writerow(['time_s', 'i', 'theta_p_deg', 'theta_r_deg',
-                                    'omega_p_deg_s', 'omega_r_deg_s', 'u_mcu', 'u_python'])
+                                    'omega_p_deg_s', 'omega_r_deg_s', 'u_mcu', 'u_python',
+                                    'theta_p_perceived_deg', 'origin_mode'])
         self._log_start_time = time.time()
         print(f"Logging to {path}")
 
@@ -497,12 +637,15 @@ class LinkManager:
             self._log_file = None
             self._log_writer = None
 
-    def _log_sample(self, i_idx, theta_p, theta_r, omega_p, omega_r, u_mcu, u_python):
+    def _log_sample(self, i_idx, theta_p, theta_r, omega_p, omega_r, u_mcu, u_python,
+                     theta_p_perceived=None, origin_mode=None):
         if self._log_writer is None:
             return
         t = time.time() - self._log_start_time
         self._log_writer.writerow([f"{t:.3f}", i_idx, theta_p, theta_r, omega_p, omega_r,
-                                    u_mcu, '' if u_python is None else f"{u_python:.1f}"])
+                                    u_mcu, '' if u_python is None else f"{u_python:.1f}",
+                                    '' if theta_p_perceived is None else theta_p_perceived,
+                                    '' if origin_mode is None else origin_mode])
 
     def _read_line(self):
         raw = self.ser.readline()
@@ -569,6 +712,9 @@ class LinkManager:
             self.ctrl = DualPidController()
             self.swing_ctrl.reset()
             self.in_balance = False
+            self.origin_mode = 'down'
+            self._startup_kick_done = self.selected_mode != 'C'
+            self._startup_kick_start = None
             self.shadow_ctrl = DualPidController()
             self.shadow_in_balance = False
             for d in self.data:
@@ -622,6 +768,81 @@ class LinkManager:
 
         i_idx, theta_p, theta_r, omega_p, omega_r, u_prev = vals
 
+        if self.selected_mode == 'C':
+            if not self._startup_kick_done:
+                if self._startup_kick_start is None:
+                    self._startup_kick_start = time.time()
+                elapsed = time.time() - self._startup_kick_start
+
+                if elapsed < STARTUP_KICK_DURATION_S:
+                    u = STARTUP_KICK_U
+                elif elapsed < STARTUP_KICK_DURATION_S + STARTUP_RETURN_DURATION_S:
+                    u = max(-STARTUP_RETURN_U_MAX, min(STARTUP_RETURN_U_MAX,
+                            -STARTUP_RETURN_KP * theta_r - STARTUP_RETURN_KD * omega_r))
+                else:
+                    u = 0.0
+                    self._startup_kick_done = True
+
+                self.ser.write(f'u {u:.1f}\r'.encode())
+                self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev,
+                                  u, theta_p, self.origin_mode)
+                self.data[0].append(theta_p)
+                self.data[1].append(theta_r)
+                self.data[2].append(u)
+                self.data[3].append(theta_p)
+                return
+
+            # Mode C: firmware always reports theta_p in the same "0 = hang
+            # down" convention app_run_swing_up()'s own telemetry uses (Src/
+            # app_session.c) -- it never tries to guess which side is
+            # upright (see report_telemetry(), Src/app_runtime.c). Derive
+            # the "0 = upright" value purely to classify which origin frame
+            # we're currently in, valid regardless of which side the
+            # pendulum approached from.
+            theta_p_upright = theta_p - 180.0 if theta_p >= 0 else theta_p + 180.0
+            self.origin_mode = 'up' if abs(theta_p_upright) <= ORIGIN_MODE_THRESHOLD['deg'] else 'down'
+            # What Python is currently treating as "0" is the *current*
+            # mode's origin, not always upright: theta_p itself (0 = down)
+            # while in down-mode, theta_p_upright (0 = up) once switched to
+            # up-mode. This intentionally jumps by ~180 deg at the exact
+            # moment origin_mode flips -- that jump is the expected signature
+            # of the origin switch, not a bug.
+            theta_p_perceived = theta_p if self.origin_mode == 'down' else theta_p_upright
+
+            # Down-mode: SwingUpController pumps energy in, fed theta_p
+            # directly (0 = down, exactly what it expects -- see its
+            # docstring). Up-mode: reuse DualPidController exactly as Mode B
+            # does, fed theta_p_upright so its "0 = upright" assumptions
+            # hold regardless of which side the pendulum approached from.
+            if abs(theta_r) > ROTOR_LIMIT_DEG:
+                u = 0.0
+                self.in_balance = False
+                self.ctrl.reset()
+            elif self.origin_mode == 'up':
+                if not self.in_balance:
+                    self.ctrl.enter_capture(theta_p_upright, theta_r)
+                    self.in_balance = True
+                u = self.ctrl.compute(theta_p_upright, theta_r, rotor_ref_steps, force_steady=True)
+            else:
+                if self.in_balance:
+                    # Was catching, escaped back down -- clear catch state
+                    # and start the swing controller fresh instead of
+                    # resuming whatever stale derivative state it had from
+                    # before capture.
+                    self.in_balance = False
+                    self.ctrl.reset()
+                    self.swing_ctrl.reset()
+                u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+
+            self.ser.write(f'u {u:.1f}\r'.encode())
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u,
+                              theta_p_perceived, self.origin_mode)
+            self.data[0].append(theta_p)
+            self.data[1].append(theta_r)
+            self.data[2].append(u)
+            self.data[3].append(theta_p_perceived)
+            return
+
         if not self.active_control:
             # Mode 1: the MCU's own onboard PID runs the session — send
             # nothing back, but also run Mode B's control law in shadow
@@ -644,6 +865,7 @@ class LinkManager:
             self.data[0].append(theta_p)
             self.data[1].append(theta_r)
             self.data[2].append(u_prev)
+            self.data[3].append(theta_p)
             return
 
         if abs(theta_r) > ROTOR_LIMIT_DEG:
@@ -652,22 +874,6 @@ class LinkManager:
             return
 
         if abs(theta_p) > PEND_CAPTURE_DEG:
-            if self.selected_mode == 'C':
-                # Still swinging up — Python drives the whole session from
-                # hang-down, so keep pumping instead of giving up.
-                if self.in_balance:
-                    # Was catching, escaped back out — clear catch state,
-                    # keep the swing-up controller's own state as-is.
-                    self.in_balance = False
-                    self.ctrl.reset()
-                u = self.swing_ctrl.compute(theta_p, theta_r)
-                self.ser.write(f'u {u:.1f}\r'.encode())
-                self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u)
-                self.data[0].append(theta_p)
-                self.data[1].append(theta_r)
-                self.data[2].append(u)
-                return
-
             if self.in_balance:
                 self.ser.write(b'u 0.0\r')
             self.in_balance = False
@@ -686,6 +892,7 @@ class LinkManager:
         self.data[0].append(theta_p)
         self.data[1].append(theta_r)
         self.data[2].append(u)
+        self.data[3].append(theta_p)
 
 
 def run_gui(port: str) -> None:
@@ -694,6 +901,12 @@ def run_gui(port: str) -> None:
     from tkinter import ttk
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+    # matplotlib's default font (DejaVu Sans) has no CJK glyphs, so the plot
+    # legend's Japanese labels would render as tofu boxes (with a "Glyph ...
+    # missing" warning) without this. These are common preinstalled Windows
+    # fonts; matplotlib silently skips whichever aren't present.
+    plt.rcParams['font.family'] = ['Yu Gothic', 'Meiryo', 'MS Gothic', 'sans-serif']
 
     try:
         ser = serial.Serial(port, BAUD, timeout=0.5)
@@ -716,6 +929,26 @@ def run_gui(port: str) -> None:
 
     status_var = tk.StringVar(value=link.status_text)
     ttk.Label(top, textvariable=status_var).pack(side="left")
+
+    # Mode C only: shows which origin frame _step_running() currently thinks
+    # the pendulum is in (see LinkManager.origin_mode) -- lets the "0 = down
+    # -> 0 = upright" frame switch be verified visually before any control
+    # law is reconnected.
+    origin_mode_var = tk.StringVar(value="原点: —")
+    origin_mode_label = ttk.Label(top, textvariable=origin_mode_var, font=("", 10, "bold"))
+    origin_mode_label.pack(side="left", padx=(16, 0))
+
+    ttk.Label(top, text="真上しきい値[deg]").pack(side="left", padx=(16, 2))
+    origin_threshold_var = tk.DoubleVar(value=ORIGIN_MODE_THRESHOLD['deg'])
+    ttk.Entry(top, textvariable=origin_threshold_var, width=6).pack(side="left")
+
+    def apply_origin_threshold():
+        try:
+            ORIGIN_MODE_THRESHOLD['deg'] = origin_threshold_var.get()
+        except tk.TclError:
+            pass  # invalid entry text — leave the threshold unchanged
+
+    ttk.Button(top, text="適用", command=apply_origin_threshold).pack(side="left", padx=(2, 0))
 
     stop_btn = ttk.Button(top, text="Stop", command=link.stop_requested.set)
     start_btn = ttk.Button(top, text="Start", command=link.start_requested.set)
@@ -742,36 +975,47 @@ def run_gui(port: str) -> None:
     mode_1_radio.pack(side="left")
     mode_d_radio.pack(side="left")
 
-    # --- Swing-up gain panel (Mode C) — live-tunable, no restart needed ---
-    swingup_frame = ttk.LabelFrame(root, text="Swing-up gains (Mode C)", padding=6)
+    # --- Swing-up parameter panel (Mode C) — live-tunable, no restart needed ---
+    swingup_frame = ttk.LabelFrame(root, text="Swing-up params (Mode C)", padding=6)
     swingup_frame.pack(fill="x", padx=8, pady=(0, 8))
 
-    swingup_vars = {key: tk.DoubleVar(value=val) for key, val in SWINGUP_GAINS.items()}
+    swingup_vars = {key: tk.DoubleVar(value=val) for key, val in SWINGUP_PARAMS.items()}
     swingup_labels = {
-        'Kp_rotor': 'Kp (rotor)', 'Kd_rotor': 'Kd (rotor)',
-        'Kp_pend': 'Kp (pend)', 'Kd_pend': 'Kd (pend)',
-        'near_bottom_deg': '真下しきい値[deg]',
+        'stage0_deg': 'Stage0[deg]', 'stage1_deg': 'Stage1[deg]', 'stage2_deg': 'Stage2[deg]',
+        'stage1_threshold_deg': 'しきい値1[deg]', 'stage2_threshold_deg': 'しきい値2[deg]',
+        'rotor_kp': 'Rotor Kp', 'rotor_ki': 'Rotor Ki', 'rotor_kd': 'Rotor Kd',
+        'rotor_u_max': 'Rotor U上限',
     }
-    for i, key in enumerate(('Kp_rotor', 'Kd_rotor', 'Kp_pend', 'Kd_pend', 'near_bottom_deg')):
-        ttk.Label(swingup_frame, text=swingup_labels[key]).grid(row=0, column=2 * i, padx=(4, 2), sticky="e")
-        ttk.Entry(swingup_frame, textvariable=swingup_vars[key], width=8).grid(row=0, column=2 * i + 1, padx=(0, 8))
+    row0_keys = ('stage0_deg', 'stage1_deg', 'stage2_deg', 'stage1_threshold_deg', 'stage2_threshold_deg')
+    row1_keys = ('rotor_kp', 'rotor_ki', 'rotor_kd', 'rotor_u_max')
+    for row, keys in enumerate((row0_keys, row1_keys)):
+        for i, key in enumerate(keys):
+            ttk.Label(swingup_frame, text=swingup_labels[key]).grid(row=row, column=2 * i, padx=(4, 2), sticky="e")
+            ttk.Entry(swingup_frame, textvariable=swingup_vars[key], width=8).grid(row=row, column=2 * i + 1, padx=(0, 8))
 
-    def apply_swingup_gains():
+    def apply_swingup_params():
         for key, var in swingup_vars.items():
             try:
-                SWINGUP_GAINS[key] = var.get()
+                SWINGUP_PARAMS[key] = var.get()
             except tk.TclError:
-                pass  # invalid entry text — leave that gain unchanged
+                pass  # invalid entry text — leave that param unchanged
 
-    ttk.Button(swingup_frame, text="適用", command=apply_swingup_gains).grid(row=0, column=10, padx=8)
+    ttk.Button(swingup_frame, text="適用", command=apply_swingup_params).grid(row=0, column=10, rowspan=2, padx=8)
 
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
     labels = ["Pendulum Angle [deg]", "Rotor Angle [deg]", "Input u [steps/s²]"]
     lines = []
     for i in range(3):
-        line, = ax[i].plot([], [])
+        line, = ax[i].plot([], [], label="生 (0=真下)" if i == 0 else None)
         lines.append(line)
         ax[i].set_ylabel(labels[i])
+    # Mode C only: theta_p_perceived — 0 = whichever origin link.origin_mode
+    # currently says we're using (down while swinging, upright once
+    # captured). Overlaid on the same axes as the raw angle above so the
+    # origin switch is directly visible: it jumps by ~180 deg at the exact
+    # moment origin_mode flips, which is expected, not a bug.
+    line_upright, = ax[0].plot([], [], label="Python視点 (現在の原点基準)")
+    ax[0].legend(loc="upper right", fontsize=8)
     ax[-1].set_xlabel("Sample")
     fig.tight_layout()
 
@@ -791,8 +1035,21 @@ def run_gui(port: str) -> None:
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_d_radio.state(['!disabled'] if at_prompt else ['disabled'])
 
+        if link.selected_mode == 'C' and link.state == STATE_RUNNING:
+            if link.origin_mode == 'up':
+                origin_mode_var.set("原点: 真上")
+                origin_mode_label.configure(foreground="blue")
+            else:
+                origin_mode_var.set("原点: 真下")
+                origin_mode_label.configure(foreground="black")
+        else:
+            origin_mode_var.set("原点: —")
+            origin_mode_label.configure(foreground="black")
+
         for i in range(3):
             lines[i].set_data(range(len(link.data[i])), list(link.data[i]))
+        line_upright.set_data(range(len(link.data[3])), list(link.data[3]))
+        for i in range(3):
             ax[i].relim()
             ax[i].autoscale_view()
         canvas.draw_idle()

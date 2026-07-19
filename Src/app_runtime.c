@@ -15,7 +15,6 @@ int control_execute_cycle(AppControlContext *ctx, int i)
 	if (control_update_state_and_safety(ctx) != 0) {
 		return 1;
 	}
-	control_resolve_upright_crossing_direction(ctx);
 
 	control_update_slope_correction(ctx, i);
 	control_prepare_targets_and_filters(ctx, i);
@@ -189,10 +188,27 @@ static void angle_cal_update(AppControlContext *ctx, int i)
 
 static void report_telemetry(AppControlContext *ctx, int i)
 {
+	float theta_p_deg;
+
 	if (i % 5 != 0) return;   /* 500 Hz loop / 5 = 100 Hz output */
+
+	if (ctx->enable_remote_swing_up) {
+		/* Mode C: report the same direction-agnostic "0 = hang down" angle
+		 * app_run_swing_up()'s own telemetry uses (Src/app_session.c) instead
+		 * of core_sys_state.pendulum_angle_rad (which assumes a specific
+		 * rotational approach direction to upright). remote_controller.py
+		 * owns all interpretation of which side is upright and how close it
+		 * is, so firmware never needs to guess/resolve a direction here --
+		 * see the "Mode C" note in remote_controller.py's LinkManager. */
+		theta_p_deg = (float) (ctx->enc_cal.encoder_position_steps
+				- ctx->enc_cal.encoder_position_down) / ctx->angle_scale;
+	} else {
+		theta_p_deg = ctx->core_sys_state.pendulum_angle_rad * (180.0f / 3.14159265f);
+	}
+
 	sprintf(uart_tx_buf, "%i,%.3f,%.3f,%.3f,%.3f,%.1f\r\n",
 			i,
-			ctx->core_sys_state.pendulum_angle_rad    * (180.0f / 3.14159265f),
+			theta_p_deg,
 			ctx->core_sys_state.rotor_angle_rad       * (180.0f / 3.14159265f),
 			ctx->core_sys_state.pendulum_velocity_rad_s * (180.0f / 3.14159265f),
 			ctx->core_sys_state.rotor_velocity_rad_s    * (180.0f / 3.14159265f),

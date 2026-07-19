@@ -150,39 +150,6 @@ int control_update_state_and_safety(AppControlContext *ctx)
 	return 0;
 }
 
-/*
- * Mode C only: the observer's pendulum_angle_rad (Src/observer.c) is a
- * linear count difference from encoder_position_down that assumes the
- * pendulum reaches upright via one specific rotational direction. If it
- * swings up the other way, the reported angle is silently off by a full
- * revolution at and beyond the upright crossing. This mirrors the
- * direction-detection correction app_run_swing_up() applies in its own exit
- * check (Src/app_session.c) as a one-shot per-cycle test instead, so it also
- * covers a Python-driven swing-up that never calls that function. Once the
- * crossing is detected (either direction), ctx->enable_remote_swing_up is
- * cleared, which both stops this check from running again and restores the
- * normal +-120 deg angle safety limit above for the rest of the session.
- */
-void control_resolve_upright_crossing_direction(AppControlContext *ctx)
-{
-	if (!ctx->enable_remote_swing_up) {
-		return;
-	}
-
-	if (fabs(ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
-			- (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-		ctx->enable_remote_swing_up = 0;
-		return;
-	}
-	if (fabs(ctx->enc_cal.encoder_position_steps - ctx->enc_cal.encoder_position_down
-			+ (int) (180 * ctx->angle_scale)) < START_ANGLE * ctx->angle_scale) {
-		ctx->enc_cal.encoder_position_down = ctx->enc_cal.encoder_position_down
-				- 2 * (int) (180 * ctx->angle_scale);
-		ctx->enable_remote_swing_up = 0;
-		return;
-	}
-}
-
 void control_update_slope_correction(AppControlContext *ctx, int i)
 {
 	ctx->rotor_pos.rotor_position_diff_prev = ctx->rotor_pos.rotor_position_diff;
