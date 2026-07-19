@@ -4,6 +4,8 @@
 # dependencies = [
 #   "pyserial",
 #   "matplotlib",
+#   "numpy",
+#   "scipy",
 # ]
 # ///
 """
@@ -39,7 +41,10 @@ import time
 from collections import deque
 from pathlib import Path
 
+import numpy as np
 import serial
+from scipy.linalg import solve_continuous_are
+from scipy.signal import cont2discrete
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 
@@ -106,6 +111,140 @@ def _lpf_coeffs(fc_hz: float, ts_s: float):
 _TS = 0.01   # 100 Hz = 5 STM32 cycles × 2 ms
 _LP_PEND  = _lpf_coeffs(10.0,  _TS)   # (a0, a1) for pendulum derivative
 _LP_ROTOR = _lpf_coeffs(50.0,  _TS)   # (a0, a1) for rotor derivative
+
+# ---------------------------------------------------------------------------
+# Linearized pendulum model (Mode C, up-mode only), system-identified
+# 2026-07-19 from real swing-up telemetry (scratch/identify_pendulum_model.py
+# -- least-squares fit of the standard Furuta-pendulum equation of motion
+# against ~93s / 9330 samples of logged theta_p, omega_p, omega_r, u_mcu;
+# R^2 = 0.99). theta_r is omitted -- it doesn't feed back into the pendulum's
+# own dynamics (only its rate, omega_r, does, via the centrifugal term below,
+# which is dropped here since it vanishes under linearization around upright
+# with the small omega_r typical of a balanced hold).
+#
+# state = [phi, phi_dot, omega_r]; phi = pendulum angle from upright [rad]
+# input = u, commanded rotor angular acceleration [rad/s^2]
+#   phi_ddot   = MODEL_W0_SQ*phi - MODEL_GAMMA*phi_dot + MODEL_K*u
+#   omega_r_dot = u   (rotor kinematically follows u; see SwingUpController)
+# ---------------------------------------------------------------------------
+MODEL_W0_SQ = 48.0553   # rad^2/s^2  (T_down = 0.906 s at theta_p=0)
+MODEL_GAMMA = 0.1757    # 1/s        (zeta = 0.013, lightly damped)
+MODEL_K     = 0.4456    # rad/s^2 of phi_ddot per rad/s^2 of u, at theta_p=0
+_MODEL_A = np.array([
+    [0.0,         1.0,          0.0],
+    [MODEL_W0_SQ, -MODEL_GAMMA, 0.0],
+    [0.0,         0.0,          0.0],
+])
+_MODEL_B = np.array([[0.0], [MODEL_K], [1.0]])
+_MODEL_Ad, _MODEL_Bd, *_ = cont2discrete(
+    (_MODEL_A, _MODEL_B, np.eye(3), np.zeros((3, 1))), _TS, method='zoh')
+
+# ---------------------------------------------------------------------------
+# LQR balance controller (Mode C up-mode only, see LQRController below) --
+# an alternative to DualPidController built on the same identified model,
+# but the full 4-state [phi, theta_r, phi_dot, omega_r] this time (unlike
+# the 3-state one-step predictor above, this one needs theta_r as a state
+# to also regulate rotor drift, DualPidController's secondary objective).
+#
+# Q/R are derived from LQR_PARAMS via Bryson's rule (Q_ii = 1/x_i_max^2,
+# R = 1/u_max^2) rather than tuned directly -- "largest excursion I'll
+# tolerate" per state is a much easier dial to turn live from the GUI than
+# an abstract weight. See scratch/lqr_design.py for the design derivation;
+# recompute_lqr_gain() re-solves the continuous-time algebraic Riccati
+# equation on demand (module load below, and the GUI's Apply button) since
+# Q/R can change live, unlike MODEL_W0_SQ/GAMMA/K above (those come from
+# system identification, not meant to be retuned at runtime).
+# ---------------------------------------------------------------------------
+LQR_PARAMS = dict(
+    phi_max_deg=5.0, theta_r_max_deg=30.0,
+    phi_dot_max_deg_s=120.0, omega_r_max_deg_s=300.0,
+    # rad/s^2 -- a "typical" ceiling for Bryson's rule, distinct from U_MAX
+    # below (the hardware's absolute output clip). Live-tuned down from an
+    # initial 100 after real hardware testing (2026-07-19): higher values
+    # gave a K aggressive enough to saturate and oscillate (see
+    # OMEGA_GLITCH_CLAMP_DEG_S's docstring for one such divergence); u_max=3
+    # is the first value confirmed to hold a stable, sustained inversion.
+    u_max=3.0,
+)
+_LQR_A = np.array([
+    [0.0,         0.0, 1.0,          0.0],
+    [0.0,         0.0, 0.0,          1.0],
+    [MODEL_W0_SQ, 0.0, -MODEL_GAMMA, 0.0],
+    [0.0,         0.0, 0.0,          0.0],
+])
+_LQR_B = np.array([[0.0], [0.0], [MODEL_K], [1.0]])
+_lqr_state = {'K': None}
+
+
+def recompute_lqr_gain():
+    """(Re)computes the LQR gain from the current LQR_PARAMS. Called once
+    at import time below, and again by the GUI's Apply button whenever
+    LQR_PARAMS changes."""
+    p = LQR_PARAMS
+    Q = np.diag([
+        1.0 / math.radians(p['phi_max_deg']) ** 2,
+        1.0 / math.radians(p['theta_r_max_deg']) ** 2,
+        1.0 / math.radians(p['phi_dot_max_deg_s']) ** 2,
+        1.0 / math.radians(p['omega_r_max_deg_s']) ** 2,
+    ])
+    R = np.array([[1.0 / p['u_max'] ** 2]])
+    P = solve_continuous_are(_LQR_A, _LQR_B, Q, R)
+    _lqr_state['K'] = np.linalg.solve(R, _LQR_B.T @ P)
+
+
+recompute_lqr_gain()
+
+# ---------------------------------------------------------------------------
+# Kalman filter (steady-state, continuous-time LQE -- the dual of the LQR
+# problem above) estimating LQRController's full state from theta_p/theta_r
+# POSITION measurements only.
+#
+# Motivation: omega_p/omega_r are not independent sensor readings -- the
+# firmware differentiates theta_p/theta_r internally to produce them. A
+# single glitched sample in that firmware-side differentiation (see
+# OMEGA_GLITCH_CLAMP_DEG_S above) once fed straight into LQRController and
+# caused a saturation cascade; the clamp is a band-aid on the symptom. This
+# observer instead treats only theta_p/theta_r as measured, and estimates
+# phi_dot/omega_r from the identified model -- sensor noise/glitches get
+# averaged out by the filter instead of amplified by raw differentiation.
+#
+# Same "physically-meaningful GUI-tunable knobs, not raw matrix entries"
+# pattern as LQR_PARAMS/recompute_lqr_gain(): measurement-noise std (degrees)
+# and process-noise std (deg/s) per channel, re-solved on demand via
+#   solve_continuous_are(A^T, C^T, Q_e, R_e) -> P_e;  L = P_e @ C^T @ R_e^-1
+# ---------------------------------------------------------------------------
+_OBS_C = np.array([
+    [1.0, 0.0, 0.0, 0.0],   # measures phi
+    [0.0, 1.0, 0.0, 0.0],   # measures theta_r
+])
+OBSERVER_PARAMS = dict(
+    phi_meas_noise_deg=0.1,              # pendulum encoder measurement noise std
+    theta_r_meas_noise_deg=0.1,          # rotor position measurement noise std
+    phi_dot_process_noise_deg_s=50.0,    # unmodeled disturbance std, phi_dot channel
+    omega_r_process_noise_deg_s=200.0,   # unmodeled disturbance std, omega_r channel
+)
+_observer_state = {'L': None}
+
+
+def recompute_observer_gain():
+    """(Re)computes the Kalman observer gain from OBSERVER_PARAMS. Called
+    once at import time below, and again by the GUI's Apply button."""
+    p = OBSERVER_PARAMS
+    Q_e = np.diag([
+        1e-10, 1e-10,   # position states: no direct process noise -- driven
+                        # purely by integrating the (uncertain) velocity states
+        math.radians(p['phi_dot_process_noise_deg_s']) ** 2,
+        math.radians(p['omega_r_process_noise_deg_s']) ** 2,
+    ])
+    R_e = np.diag([
+        math.radians(p['phi_meas_noise_deg']) ** 2,
+        math.radians(p['theta_r_meas_noise_deg']) ** 2,
+    ])
+    P_e = solve_continuous_are(_LQR_A.T, _OBS_C.T, Q_e, R_e)
+    _observer_state['L'] = P_e @ _OBS_C.T @ np.linalg.inv(R_e)
+
+
+recompute_observer_gain()
 
 # ---------------------------------------------------------------------------
 # Safety limits
@@ -297,6 +436,115 @@ class DualPidController:
 
         u = u_pend + u_rotor - gains['Ki_comp'] * self._rotor_integral
         return max(-U_MAX, min(U_MAX, u))
+
+
+# Sanity clamp for LQRController's omega_p/omega_r inputs (2026-07-19): a
+# live catch diverged when a single glitched telemetry sample reported
+# omega_p=15445 deg/s while theta_p had barely moved (max ever seen in real
+# swing data was ~700 deg/s) -- likely a one-sample corruption in the
+# firmware's own velocity filter. DualPidController never sees this because
+# it derives its own (filtered) derivative from theta_p/theta_r instead of
+# trusting the telemetry's omega fields; LQRController trusts them directly
+# (matching how the model was identified/validated), so it needs its own
+# guard. Well above any physically-plausible value, so this only rejects
+# clear corruption, not real fast dynamics.
+OMEGA_GLITCH_CLAMP_DEG_S = 1500.0
+
+
+class LQRController:
+    """Full-state-feedback LQR balance controller for Mode C's up-mode, an
+    alternative to DualPidController built on the same identified model --
+    see LQR_PARAMS/recompute_lqr_gain() above for the design.
+
+    Stateless: unlike DualPidController's finite-differenced/IIR-filtered
+    derivatives, this reads omega_p/omega_r straight from telemetry every
+    call (matching how the model was identified and validated) instead of
+    computing its own, aside from clamping clearly-impossible values (see
+    OMEGA_GLITCH_CLAMP_DEG_S) -- so there's no internal filter state to
+    reset or prime between catches. reset() and enter_capture() are no-ops
+    kept only for interface parity with DualPidController, so LinkManager
+    can treat either uniformly.
+    """
+
+    def reset(self):
+        pass
+
+    def enter_capture(self, theta_p_deg: float, theta_r_deg: float):
+        pass
+
+    def compute(self, theta_p_deg: float, theta_r_deg: float,
+                omega_p_deg: float, omega_r_deg: float,
+                rotor_ref: float = 0.0) -> float:
+        """theta_p_deg: 0 = upright (phi). rotor_ref: steps, matching
+        DualPidController's own convention (always 0 in practice -- see
+        rotor_ref_steps below)."""
+        omega_p_deg = max(-OMEGA_GLITCH_CLAMP_DEG_S, min(OMEGA_GLITCH_CLAMP_DEG_S, omega_p_deg))
+        omega_r_deg = max(-OMEGA_GLITCH_CLAMP_DEG_S, min(OMEGA_GLITCH_CLAMP_DEG_S, omega_r_deg))
+        x = np.array([
+            math.radians(theta_p_deg),
+            math.radians(theta_r_deg) - rotor_ref * STEPPER_RAD_PER_STEP,
+            math.radians(omega_p_deg),
+            math.radians(omega_r_deg),
+        ])
+        return self.compute_from_state(x)
+
+    def compute_from_state(self, x: np.ndarray) -> float:
+        """Same control law as compute() above, but takes an already-
+        assembled state vector [phi, theta_r_rel, phi_dot, omega_r] (rad,
+        rad, rad/s, rad/s) -- e.g. a KalmanObserver's estimate -- instead of
+        raw telemetry. No glitch clamp here: a state-estimator's own
+        measurement-noise model (OBSERVER_PARAMS) already bounds how much a
+        single bad position sample can move the estimate, so there's nothing
+        analogous to OMEGA_GLITCH_CLAMP_DEG_S to guard against."""
+        u_rad_s2 = float(-(_lqr_state['K'] @ x)[0])
+        u = u_rad_s2 / STEPPER_RAD_PER_STEP
+        return max(-U_MAX, min(U_MAX, u))
+
+
+class KalmanObserver:
+    """Steady-state Kalman filter estimating LQRController's full state
+    [phi, theta_r, phi_dot, omega_r] from theta_p/theta_r POSITION
+    measurements only -- see OBSERVER_PARAMS/recompute_observer_gain() above.
+
+    Stateful (unlike LQRController): x_hat persists across calls between
+    enter_capture()/reset(). update() is a combined predict+correct step
+    (continuous-time observer integrated with a simple Euler step at _TS),
+    mirroring how the rest of this file assumes a fixed sample period rather
+    than measuring actual wall-clock dt (see DualPidController._ts).
+    """
+
+    def __init__(self):
+        self.x_hat = np.zeros(4)
+
+    def reset(self):
+        self.x_hat[:] = 0.0
+
+    def enter_capture(self, theta_p_deg: float, theta_r_deg: float,
+                       rotor_ref: float = 0.0):
+        """Primes position states to the measured value and zeroes the
+        velocity states -- start from a physically sane guess instead of
+        carrying over a stale estimate from a previous catch."""
+        self.x_hat[0] = math.radians(theta_p_deg)
+        self.x_hat[1] = math.radians(theta_r_deg) - rotor_ref * STEPPER_RAD_PER_STEP
+        self.x_hat[2] = 0.0
+        self.x_hat[3] = 0.0
+
+    def update(self, theta_p_deg: float, theta_r_deg: float,
+               u_prev_rad_s2: float, rotor_ref: float = 0.0,
+               dt: float = _TS) -> np.ndarray:
+        """One filter step: predict with the identified model + the u that
+        was actually commanded last cycle, correct against this cycle's
+        theta_p/theta_r measurement. Returns the updated x_hat -- feed
+        straight into LQRController.compute_from_state()."""
+        y = np.array([
+            math.radians(theta_p_deg),
+            math.radians(theta_r_deg) - rotor_ref * STEPPER_RAD_PER_STEP,
+        ])
+        innovation = y - _OBS_C @ self.x_hat
+        x_hat_dot = (_LQR_A @ self.x_hat + _LQR_B.flatten() * u_prev_rad_s2
+                     + _observer_state['L'] @ innovation)
+        self.x_hat = self.x_hat + x_hat_dot * dt
+        return self.x_hat
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +833,24 @@ class LinkManager:
         self.quit = threading.Event()
         self.data = [deque(maxlen=MAX_POINTS) for _ in range(4)]  # theta_p, theta_r, u, theta_p_upright
         self.ctrl = DualPidController()
+        self.lqr_ctrl = LQRController()
+        # Mode C up-mode only: which balance controller is currently active,
+        # 'pid' (DualPidController) or 'lqr' (LQRController) -- see the GUI's
+        # controller radio buttons. Switchable live; DualPidController may
+        # take a cycle to settle after switching back to it since it wasn't
+        # being called (and its derivative-filter state wasn't updating)
+        # while LQRController was active.
+        self.balance_controller = 'pid'
+        # LQR-only: where LQRController's state vector comes from --
+        # 'telemetry' (theta_p/theta_r/omega_p/omega_r straight off the wire,
+        # clamped -- see OMEGA_GLITCH_CLAMP_DEG_S) or 'observer'
+        # (KalmanObserver's filtered estimate, theta_p/theta_r position-only).
+        self.lqr_state_source = 'telemetry'
+        self.observer = KalmanObserver()
+        # u actually commanded last cycle (steps/s^2, same units this file
+        # sends over serial) -- KalmanObserver.update() needs this as its
+        # predict-step input, since it isn't in the telemetry line itself.
+        self._last_u_python = 0.0
         self.swing_ctrl = SwingUpController()
         self.in_balance = False
         # Mode 1 only: DualPidController run in parallel, never sent, purely
@@ -605,6 +871,12 @@ class LinkManager:
         # Mode C only: which origin frame the GUI should currently show,
         # 'down' (0 = hang down) or 'up' (0 = upright) -- see _step_running().
         self.origin_mode = 'down'
+        # Mode C up-mode only: MODEL_A/B's one-step-ahead prediction of this
+        # cycle's phi (made last cycle from last cycle's state+u), logged
+        # alongside the actual value to validate the identified model live
+        # instead of only offline. None whenever there's no prediction to
+        # compare yet (mode just entered, or not in up-mode).
+        self._model_pred_phi_deg = None
         # Mode C only: fires a short, fixed test pulse at the very start of
         # each session (see _step_running()) to quickly confirm the rotor
         # physically responds at all in *this* session, independent of
@@ -627,7 +899,8 @@ class LinkManager:
         self._log_writer = csv.writer(self._log_file)
         self._log_writer.writerow(['time_s', 'i', 'theta_p_deg', 'theta_r_deg',
                                     'omega_p_deg_s', 'omega_r_deg_s', 'u_mcu', 'u_python',
-                                    'theta_p_perceived_deg', 'origin_mode'])
+                                    'theta_p_perceived_deg', 'origin_mode', 'model_pred_phi_deg',
+                                    'phi_hat_deg', 'theta_r_hat_deg', 'phi_dot_hat_deg_s', 'omega_r_hat_deg_s'])
         self._log_start_time = time.time()
         print(f"Logging to {path}")
 
@@ -638,14 +911,19 @@ class LinkManager:
             self._log_writer = None
 
     def _log_sample(self, i_idx, theta_p, theta_r, omega_p, omega_r, u_mcu, u_python,
-                     theta_p_perceived=None, origin_mode=None):
+                     theta_p_perceived=None, origin_mode=None, model_pred_phi_deg=None,
+                     phi_hat_deg=None, theta_r_hat_deg=None, phi_dot_hat_deg=None, omega_r_hat_deg=None):
         if self._log_writer is None:
             return
         t = time.time() - self._log_start_time
+        fmt = lambda v: '' if v is None else f"{v:.4f}"
         self._log_writer.writerow([f"{t:.3f}", i_idx, theta_p, theta_r, omega_p, omega_r,
                                     u_mcu, '' if u_python is None else f"{u_python:.1f}",
                                     '' if theta_p_perceived is None else theta_p_perceived,
-                                    '' if origin_mode is None else origin_mode])
+                                    '' if origin_mode is None else origin_mode,
+                                    '' if model_pred_phi_deg is None else f"{model_pred_phi_deg:.3f}",
+                                    fmt(phi_hat_deg), fmt(theta_r_hat_deg),
+                                    fmt(phi_dot_hat_deg), fmt(omega_r_hat_deg)])
 
     def _read_line(self):
         raw = self.ser.readline()
@@ -710,9 +988,13 @@ class LinkManager:
             self.active_control = self.selected_mode in ('B', 'C')
             self.ser.write((self.selected_mode + '\r').encode())
             self.ctrl = DualPidController()
+            self.lqr_ctrl.reset()
+            self.observer.reset()
+            self._last_u_python = 0.0
             self.swing_ctrl.reset()
             self.in_balance = False
             self.origin_mode = 'down'
+            self._model_pred_phi_deg = None
             self._startup_kick_done = self.selected_mode != 'C'
             self._startup_kick_start = None
             self.shadow_ctrl = DualPidController()
@@ -811,18 +1093,35 @@ class LinkManager:
 
             # Down-mode: SwingUpController pumps energy in, fed theta_p
             # directly (0 = down, exactly what it expects -- see its
-            # docstring). Up-mode: reuse DualPidController exactly as Mode B
-            # does, fed theta_p_upright so its "0 = upright" assumptions
+            # docstring). Up-mode: whichever of DualPidController/
+            # LQRController self.balance_controller currently selects, fed
+            # theta_p_upright so both controllers' "0 = upright" assumptions
             # hold regardless of which side the pendulum approached from.
+            active_ctrl = self.lqr_ctrl if self.balance_controller == 'lqr' else self.ctrl
+            phi_dot_hat_deg = theta_r_hat_deg = phi_hat_deg = omega_r_hat_deg = None
             if abs(theta_r) > ROTOR_LIMIT_DEG:
                 u = 0.0
                 self.in_balance = False
                 self.ctrl.reset()
+                self.lqr_ctrl.reset()
+                self.observer.reset()
             elif self.origin_mode == 'up':
                 if not self.in_balance:
-                    self.ctrl.enter_capture(theta_p_upright, theta_r)
+                    active_ctrl.enter_capture(theta_p_upright, theta_r)
+                    if self.balance_controller == 'lqr' and self.lqr_state_source == 'observer':
+                        self.observer.enter_capture(theta_p_upright, theta_r, rotor_ref_steps)
                     self.in_balance = True
-                u = self.ctrl.compute(theta_p_upright, theta_r, rotor_ref_steps, force_steady=True)
+                if self.balance_controller == 'lqr':
+                    if self.lqr_state_source == 'observer':
+                        u_prev_rad_s2 = self._last_u_python * STEPPER_RAD_PER_STEP
+                        x_hat = self.observer.update(theta_p_upright, theta_r, u_prev_rad_s2, rotor_ref_steps)
+                        u = self.lqr_ctrl.compute_from_state(x_hat)
+                        phi_hat_deg, theta_r_hat_deg = math.degrees(x_hat[0]), math.degrees(x_hat[1])
+                        phi_dot_hat_deg, omega_r_hat_deg = math.degrees(x_hat[2]), math.degrees(x_hat[3])
+                    else:
+                        u = self.lqr_ctrl.compute(theta_p_upright, theta_r, omega_p, omega_r, rotor_ref_steps)
+                else:
+                    u = self.ctrl.compute(theta_p_upright, theta_r, rotor_ref_steps, force_steady=True)
             else:
                 if self.in_balance:
                     # Was catching, escaped back down -- clear catch state
@@ -831,12 +1130,34 @@ class LinkManager:
                     # before capture.
                     self.in_balance = False
                     self.ctrl.reset()
+                    self.lqr_ctrl.reset()
+                    self.observer.reset()
                     self.swing_ctrl.reset()
                 u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+            self._last_u_python = u
+
+            # Up-mode only: one-step-ahead prediction from MODEL_A/B/_MODEL_Ad
+            # (Bd), logged so it can be compared against the actual next
+            # sample offline -- live validation of the identified model.
+            # model_pred_deg holds the prediction *made last cycle* for THIS
+            # cycle (None on the first up-mode sample, nothing to compare
+            # yet); a fresh prediction for the next cycle is computed right
+            # after using this cycle's own state and u.
+            if self.origin_mode == 'up':
+                model_pred_deg = self._model_pred_phi_deg
+                x_k = np.array([[math.radians(theta_p_upright)],
+                                 [math.radians(omega_p)],
+                                 [math.radians(omega_r)]])
+                x_next = _MODEL_Ad @ x_k + _MODEL_Bd * (u * STEPPER_RAD_PER_STEP)
+                self._model_pred_phi_deg = math.degrees(x_next[0, 0])
+            else:
+                model_pred_deg = None
+                self._model_pred_phi_deg = None
 
             self.ser.write(f'u {u:.1f}\r'.encode())
             self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u,
-                              theta_p_perceived, self.origin_mode)
+                              theta_p_perceived, self.origin_mode, model_pred_deg,
+                              phi_hat_deg, theta_r_hat_deg, phi_dot_hat_deg, omega_r_hat_deg)
             self.data[0].append(theta_p)
             self.data[1].append(theta_r)
             self.data[2].append(u)
@@ -1001,6 +1322,83 @@ def run_gui(port: str) -> None:
                 pass  # invalid entry text — leave that param unchanged
 
     ttk.Button(swingup_frame, text="適用", command=apply_swingup_params).grid(row=0, column=10, rowspan=2, padx=8)
+
+    # --- Balance controller selector + LQR parameter panel (Mode C up-mode) ---
+    # Switchable live (see LinkManager.balance_controller); Q/R re-derived
+    # via Bryson's rule from these bounds (recompute_lqr_gain()) rather than
+    # tuned directly, matching SWINGUP_PARAMS' live-tunable-with-no-restart
+    # pattern above.
+    balance_frame = ttk.LabelFrame(root, text="Balance controller (Mode C up-mode)", padding=6)
+    balance_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+    balance_ctrl_var = tk.StringVar(value=link.balance_controller)
+
+    def on_balance_ctrl_change():
+        link.balance_controller = balance_ctrl_var.get()
+
+    ttk.Radiobutton(balance_frame, text="PID (DualPidController)", variable=balance_ctrl_var,
+                     value='pid', command=on_balance_ctrl_change).grid(row=0, column=0, columnspan=4, sticky="w")
+    ttk.Radiobutton(balance_frame, text="LQR", variable=balance_ctrl_var,
+                     value='lqr', command=on_balance_ctrl_change).grid(row=0, column=4, columnspan=2, sticky="w")
+
+    lqr_vars = {key: tk.DoubleVar(value=val) for key, val in LQR_PARAMS.items()}
+    lqr_labels = {
+        'phi_max_deg': 'phi上限[deg]', 'theta_r_max_deg': 'theta_r上限[deg]',
+        'phi_dot_max_deg_s': 'phi_dot上限[deg/s]', 'omega_r_max_deg_s': 'omega_r上限[deg/s]',
+        'u_max': 'u上限[rad/s²]',
+    }
+    lqr_keys = ('phi_max_deg', 'theta_r_max_deg', 'phi_dot_max_deg_s', 'omega_r_max_deg_s', 'u_max')
+    for i, key in enumerate(lqr_keys):
+        ttk.Label(balance_frame, text=lqr_labels[key]).grid(row=1, column=2 * i, padx=(4, 2), sticky="e")
+        ttk.Entry(balance_frame, textvariable=lqr_vars[key], width=8).grid(row=1, column=2 * i + 1, padx=(0, 8))
+
+    def apply_lqr_params():
+        for key, var in lqr_vars.items():
+            try:
+                LQR_PARAMS[key] = var.get()
+            except tk.TclError:
+                pass  # invalid entry text — leave that param unchanged
+        recompute_lqr_gain()
+
+    ttk.Button(balance_frame, text="適用", command=apply_lqr_params).grid(row=1, column=10, padx=8)
+
+    # LQR only: where the state vector fed into LQRController comes from.
+    lqr_source_var = tk.StringVar(value=link.lqr_state_source)
+
+    def on_lqr_source_change():
+        link.lqr_state_source = lqr_source_var.get()
+
+    ttk.Radiobutton(balance_frame, text="状態: テレメトリ直接(+グリッチクランプ)", variable=lqr_source_var,
+                     value='telemetry', command=on_lqr_source_change).grid(row=2, column=0, columnspan=5, sticky="w")
+    ttk.Radiobutton(balance_frame, text="状態: Kalman Observer", variable=lqr_source_var,
+                     value='observer', command=on_lqr_source_change).grid(row=2, column=5, columnspan=3, sticky="w")
+
+    # --- Kalman observer parameter panel (LQR state source = observer) ---
+    observer_frame = ttk.LabelFrame(root, text="Kalman Observer (LQR用状態推定)", padding=6)
+    observer_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+    observer_vars = {key: tk.DoubleVar(value=val) for key, val in OBSERVER_PARAMS.items()}
+    observer_labels = {
+        'phi_meas_noise_deg': '測定雑音 phi[deg]',
+        'theta_r_meas_noise_deg': '測定雑音 theta_r[deg]',
+        'phi_dot_process_noise_deg_s': 'プロセス雑音 phi_dot[deg/s]',
+        'omega_r_process_noise_deg_s': 'プロセス雑音 omega_r[deg/s]',
+    }
+    observer_keys = ('phi_meas_noise_deg', 'theta_r_meas_noise_deg',
+                      'phi_dot_process_noise_deg_s', 'omega_r_process_noise_deg_s')
+    for i, key in enumerate(observer_keys):
+        ttk.Label(observer_frame, text=observer_labels[key]).grid(row=0, column=2 * i, padx=(4, 2), sticky="e")
+        ttk.Entry(observer_frame, textvariable=observer_vars[key], width=8).grid(row=0, column=2 * i + 1, padx=(0, 8))
+
+    def apply_observer_params():
+        for key, var in observer_vars.items():
+            try:
+                OBSERVER_PARAMS[key] = var.get()
+            except tk.TclError:
+                pass  # invalid entry text — leave that param unchanged
+        recompute_observer_gain()
+
+    ttk.Button(observer_frame, text="適用", command=apply_observer_params).grid(row=0, column=10, padx=8)
 
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
     labels = ["Pendulum Angle [deg]", "Rotor Angle [deg]", "Input u [steps/s²]"]
