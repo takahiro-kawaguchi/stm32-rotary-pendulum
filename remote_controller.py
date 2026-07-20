@@ -1997,6 +1997,21 @@ def run_gui(port: str, school: bool = False) -> None:
     style.configure("TNotebook.Tab", font=UI_FONT, padding=(12, 6))
     style.configure("TButton", padding=6)
     style.configure("Big.TButton", font=BIG_FONT, padding=(28, 18))
+    # Windows' default ttk theme doesn't reliably cascade the "." font
+    # override down to Entry/Radiobutton/Checkbutton -- set them explicitly
+    # rather than relying on inheritance (this was the concrete cause of
+    # "the number next to the slider is small": TEntry was silently staying
+    # at the Tk default size despite the "." override above).
+    style.configure("TEntry", font=UI_FONT)
+    style.configure("TRadiobutton", font=UI_FONT)
+    style.configure("TCheckbutton", font=UI_FONT)
+    SLIDER_ENTRY_FONT = (UI_FONT[0], 15, "bold")
+    # School mode's Step tab bar (see below): ttk.Notebook can't wrap tabs
+    # onto multiple rows, so it's built from Toolbutton-styled Radiobuttons
+    # in a manual grid instead -- Toolbutton is ttk's built-in "flat,
+    # looks-pressed-when-selected" style, the standard way to fake a tab bar
+    # when you need more layout control than Notebook allows.
+    style.configure("Toolbutton", font=(UI_FONT[0], UI_FONT[1], "bold"), padding=(10, 10))
 
     # School mode only: the instructor-facing "詳細設定" toggle (see below)
     # shows/hides the advanced widgets collected here instead of them always
@@ -2257,12 +2272,13 @@ def run_gui(port: str, school: bool = False) -> None:
 
     ttk.Button(observer_frame, text="適用", command=apply_observer_params).grid(row=0, column=10, rowspan=2, padx=8)
 
-    # --- School mode: Step1-8 Notebook tabs (see STEP_DEFS) ---
+    # --- School mode: Step1-8 tab bar (see STEP_DEFS) ---
     capture_stats = {'A': None, 'B': None}
     capture_label_vars = {'A': tk.StringVar(value='記録A: -'), 'B': tk.StringVar(value='記録B: -')}
     step_slider_vars = {}   # step_key -> {slider_key: DoubleVar}
     step7_pid_var = None    # live LQR_EQUIVALENT_PID readout, updated in tick()
-    notebook = None
+    step_frames = {}        # step_key -> content Frame (manual tabs, see below)
+    active_step_var = None
 
     if school:
         school_frame = ttk.LabelFrame(settings_frame, text="スクールモード", padding=8)
@@ -2273,8 +2289,37 @@ def run_gui(port: str, school: bool = False) -> None:
         ttk.Label(top_row, text="グループID:").pack(side="left")
         ttk.Entry(top_row, textvariable=group_var, width=4).pack(side="left", padx=(4, 16))
 
-        notebook = ttk.Notebook(school_frame)
-        notebook.pack(fill="x", pady=(6, 0))
+        # 2 rows x 4 columns of tab-like toggle buttons (see show_step()
+        # below) instead of a ttk.Notebook -- Notebook only ever lays its
+        # tabs out on one row, which either overflows into a tiny scroll
+        # arrow or forces the tab font back down at 8 Steps' worth of
+        # labels, defeating the point of the larger font elsewhere.
+        tab_bar = ttk.Frame(school_frame)
+        tab_bar.pack(fill="x", pady=(6, 4))
+        for col in range(4):
+            tab_bar.columnconfigure(col, weight=1)
+
+        content_container = ttk.Frame(school_frame)
+        content_container.pack(fill="both", expand=True)
+
+        active_step_var = tk.StringVar(value=STEP_ORDER[0])
+
+        def show_step(step_key):
+            active_step_var.set(step_key)
+            for frame in step_frames.values():
+                frame.pack_forget()
+            step_frames[step_key].pack(fill="both", expand=True)
+            # Applies live, even mid-session -- see set_current_step()'s
+            # docstring for why switching Steps doesn't need a Stop/Start.
+            link.set_current_step(step_key)
+            apply_step_sliders(step_key)
+
+        for i, step_key in enumerate(STEP_ORDER):
+            row, col = divmod(i, 4)
+            ttk.Radiobutton(tab_bar, text=STEP_DEFS[step_key]['label'], variable=active_step_var,
+                             value=step_key, style="Toolbutton",
+                             command=lambda k=step_key: show_step(k)).grid(
+                row=row, column=col, sticky="ew", padx=2, pady=2)
 
         def apply_step_sliders(step_key):
             if step_key == 'step6':
@@ -2333,7 +2378,7 @@ def run_gui(port: str, school: bool = False) -> None:
             bind_scale_click_to_jump(scale)
 
             entry_var = tk.StringVar(value=f"{var.get():.3g}")
-            entry = ttk.Entry(parent, textvariable=entry_var, width=8)
+            entry = ttk.Entry(parent, textvariable=entry_var, width=8, font=SLIDER_ENTRY_FONT)
             entry.grid(row=row, column=2, padx=(8, 0), pady=2)
 
             def sync_entry_from_var(*_):
@@ -2425,8 +2470,8 @@ def run_gui(port: str, school: bool = False) -> None:
 
         for step_key in STEP_ORDER:
             step_def = STEP_DEFS[step_key]
-            frame = ttk.Frame(notebook, padding=8)
-            notebook.add(frame, text=step_def['label'])
+            frame = ttk.Frame(content_container, padding=8)
+            step_frames[step_key] = frame
 
             ttk.Label(frame, text=step_def['challenge'], wraplength=680,
                       justify="left", font=(UI_FONT[0], 14, "bold")).pack(fill="x", pady=(0, 8))
@@ -2475,18 +2520,10 @@ def run_gui(port: str, school: bool = False) -> None:
                 ttk.Radiobutton(choice_frame, text="LQR (Step7)", variable=balance_ctrl_var,
                                 value='lqr', command=on_balance_ctrl_change).pack(side="left", padx=(8, 0))
 
-        def on_tab_change(event=None):
-            # Applies live, even mid-session -- see set_current_step()'s
-            # docstring for why switching Steps doesn't need a Stop/Start.
-            step_key = STEP_ORDER[notebook.index('current')]
-            link.set_current_step(step_key)
-            apply_step_sliders(step_key)
-
-        notebook.bind('<<NotebookTabChanged>>', on_tab_change)
-        on_tab_change()
+        show_step(STEP_ORDER[0])
 
         def reset_current_step():
-            step_key = STEP_ORDER[notebook.index('current')]
+            step_key = active_step_var.get()
             if step_key == 'step6':
                 mode_def = STEP_DEFS['step6']['modes'][link.step6_mode]
                 for s in mode_def['sliders']:
