@@ -1094,10 +1094,15 @@ STEP_DEFS = {
         # so Step2<->Step3 share the exact same value -- Step3 = Step2 +
         # a Kd term, not a separate independent setup, so switching between
         # them shouldn't reset what was already tuned.
+        # Sliders start at 0 (see the "お手本値を代入" button in run_gui())
+        # rather than a pre-tuned value -- the idea is to think first, turn
+        # the gain up from nothing, and only reach for the reference value
+        # if stuck. `reference` is the value that button applies.
         sliders=(
             dict(key='target_deg', label='目標角度[deg]', frm=-90.0, to=90.0, default=0.0,
                  shared='rotor_target_deg'),
-            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0, shared='rotor_Kp'),
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=0.0, reference=20.0,
+                 shared='rotor_Kp'),
         ),
         apply=lambda v: apply_step2_sliders(v['target_deg'], v['Kp']),
     ),
@@ -1107,8 +1112,10 @@ STEP_DEFS = {
         sliders=(
             dict(key='target_deg', label='目標角度[deg]', frm=-90.0, to=90.0, default=0.0,
                  shared='rotor_target_deg'),
-            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0, shared='rotor_Kp'),
-            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0, shared='rotor_Kd'),
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=0.0, reference=20.0,
+                 shared='rotor_Kp'),
+            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0, reference=5.0,
+                 shared='rotor_Kd'),
         ),
         apply=lambda v: apply_step3_sliders(v['target_deg'], v['Kp'], v['Kd']),
     ),
@@ -1156,9 +1163,11 @@ STEP_DEFS = {
         #     for k1 alone to matter much) -- kept at a small positive
         #     default per 計画.md's own hypothesis ("重心位置を目標値に
         #     する"), but k2 is where the real effect is at this Kp/Kd.
+        # Sliders start at 0 (see "お手本値を代入" in run_gui()); reference=
+        # is the verified point from the eigenvalue analysis below.
         sliders=(
-            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0),
-            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=10.0),
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=0.0, reference=20.0),
+            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0, reference=10.0),
             # k1/k2 ranges widened 2026-07-20: a Bryson's-rule LQR design
             # swept across tighter theta_p_max_deg tolerances (30 deg down
             # to 1 deg) landed k1 anywhere from ~27 up to ~1550 and k2 from
@@ -1166,8 +1175,8 @@ STEP_DEFS = {
             # end of that range. k1's own range given extra headroom above
             # that ~1550 ceiling (matching Kp's own 2000 span) since it's
             # the one that kept climbing fastest as tolerance tightened.
-            dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=10.0),
-            dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=20.0),
+            dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=0.0, reference=10.0),
+            dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=0.0, reference=20.0),
         ),
         apply=lambda v: apply_step4_sliders(v['Kp'], v['Kd'], v['k1'], v['k2']),
     ),
@@ -1177,15 +1186,23 @@ STEP_DEFS = {
         # 8 of SWINGUP_PARAMS' 9 knobs the instructor's advanced panel
         # exposes -- rotor_ki omitted (see apply_step5_sliders(), forced to
         # 0 for this step).
+        # Sliders start at 0 (see "お手本値を代入" in run_gui()) -- with
+        # every stage amplitude and rotor gain at 0, nothing moves at all,
+        # a safe/inert starting point. reference= is the firmware's own
+        # proven bang-bang values (see the module comment above
+        # SWINGUP_PARAMS).
+        # frm widened down to 0 on every slider here (2026-07-20) so the new
+        # 0 default is actually reachable/displayable on the Scale itself,
+        # not just in the underlying variable.
         sliders=(
-            dict(key='stage0_deg', label='初期振幅Stage0[deg]', frm=10.0, to=35.0, default=22.5),
-            dict(key='stage1_deg', label='中間振幅Stage1[deg]', frm=5.0, to=25.0, default=14.625),
-            dict(key='stage2_deg', label='後半振幅Stage2[deg]', frm=5.0, to=20.0, default=13.5),
-            dict(key='stage1_threshold_deg', label='しきい値1[deg]', frm=50.0, to=150.0, default=90.0),
-            dict(key='stage2_threshold_deg', label='しきい値2[deg]', frm=100.0, to=200.0, default=150.0),
-            dict(key='rotor_kp', label='ロータ比例Kp', frm=500.0, to=3000.0, default=1500.0),
-            dict(key='rotor_kd', label='ロータ微分Kd', frm=0.0, to=400.0, default=150.0),
-            dict(key='rotor_u_max', label='ロータu上限', frm=5000.0, to=30000.0, default=20000.0),
+            dict(key='stage0_deg', label='初期振幅Stage0[deg]', frm=0.0, to=35.0, default=0.0, reference=22.5),
+            dict(key='stage1_deg', label='中間振幅Stage1[deg]', frm=0.0, to=25.0, default=0.0, reference=14.625),
+            dict(key='stage2_deg', label='後半振幅Stage2[deg]', frm=0.0, to=20.0, default=0.0, reference=13.5),
+            dict(key='stage1_threshold_deg', label='しきい値1[deg]', frm=0.0, to=150.0, default=0.0, reference=90.0),
+            dict(key='stage2_threshold_deg', label='しきい値2[deg]', frm=0.0, to=200.0, default=0.0, reference=150.0),
+            dict(key='rotor_kp', label='ロータ比例Kp', frm=0.0, to=3000.0, default=0.0, reference=1500.0),
+            dict(key='rotor_kd', label='ロータ微分Kd', frm=0.0, to=400.0, default=0.0, reference=150.0),
+            dict(key='rotor_u_max', label='ロータu上限', frm=0.0, to=30000.0, default=0.0, reference=20000.0),
         ),
         apply=lambda v: apply_step5_sliders(**v),
         swing_gain=1.0, balance_gain=0.0, balance_controller=None,
@@ -1198,21 +1215,25 @@ STEP_DEFS = {
         # 'sliders'/'apply' here (unlike every other step) -- see modes[...]
         # instead, keyed the same way link.step6_mode is.
         modes={
+            # Every mode's sliders start at 0 (see "お手本値を代入" in
+            # run_gui()); reference= is what that button applies. frm
+            # widened down to 0 wherever it wasn't already, so 0 is
+            # actually reachable/displayable on the Scale itself.
             'coupled': dict(
                 mode_label="まとめて調整",
                 sliders=(
-                    dict(key='responsiveness', label='反応の速さ', frm=0.5, to=1.8, default=1.0),
-                    dict(key='damping', label='揺れの抑え方', frm=0.5, to=2.0, default=1.0),
+                    dict(key='responsiveness', label='反応の速さ', frm=0.0, to=1.8, default=0.0, reference=1.0),
+                    dict(key='damping', label='揺れの抑え方', frm=0.0, to=2.0, default=0.0, reference=1.0),
                 ),
                 apply=lambda v: apply_step6_sliders(v['responsiveness'], v['damping']),
             ),
             'independent': dict(
                 mode_label="個別調整",
                 sliders=(
-                    dict(key='Kp_pend', label='比例ゲイン(振り子)', frm=0.0, to=600.0, default=300.0),
-                    dict(key='Kd_pend', label='微分ゲイン(振り子)', frm=0.0, to=100.0, default=30.0),
-                    dict(key='Kp_rotor', label='比例ゲイン(ロータ)', frm=0.0, to=60.0, default=15.0),
-                    dict(key='Kd_rotor', label='微分ゲイン(ロータ)', frm=0.0, to=30.0, default=7.5),
+                    dict(key='Kp_pend', label='比例ゲイン(振り子)', frm=0.0, to=600.0, default=0.0, reference=300.0),
+                    dict(key='Kd_pend', label='微分ゲイン(振り子)', frm=0.0, to=100.0, default=0.0, reference=30.0),
+                    dict(key='Kp_rotor', label='比例ゲイン(ロータ)', frm=0.0, to=60.0, default=0.0, reference=15.0),
+                    dict(key='Kd_rotor', label='微分ゲイン(ロータ)', frm=0.0, to=30.0, default=0.0, reference=7.5),
                 ),
                 apply=lambda v: apply_step6_independent_sliders(
                     v['Kp_pend'], v['Kd_pend'], v['Kp_rotor'], v['Kd_rotor']),
@@ -1223,10 +1244,10 @@ STEP_DEFS = {
                 # via "Step4の値を反映" always fits without the slider
                 # clamping it down to a narrower span on the next touch.
                 sliders=(
-                    dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0),
-                    dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0),
-                    dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=-1.0),
-                    dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=-0.5),
+                    dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=0.0, reference=20.0),
+                    dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0, reference=0.0),
+                    dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=0.0, reference=-1.0),
+                    dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=0.0, reference=-0.5),
                 ),
                 apply=lambda v: apply_step6_inverted_sliders(v['Kp'], v['Kd'], v['k1'], v['k2']),
             ),
@@ -1239,6 +1260,11 @@ STEP_DEFS = {
         # Full LQR_PARAMS, same 5 knobs the instructor's advanced panel
         # exposes (see balance_frame's lqr_keys in run_gui()) -- not just
         # phi_max_deg, so students can see the whole Bryson's-rule picture.
+        #
+        # Unlike every other Step, these do NOT start at 0 and have no
+        # `reference` -- recompute_lqr_gain() builds Q as diag(1/x^2) for
+        # each bound here, so a bound of 0 is a division by zero, not a
+        # meaningful "off" state the way a raw gain of 0 is elsewhere.
         sliders=(
             dict(key='phi_max_deg', label='phi上限[deg]', frm=1.0, to=20.0, default=5.0),
             dict(key='theta_r_max_deg', label='theta_r上限[deg]', frm=5.0, to=90.0, default=30.0),
@@ -2522,21 +2548,40 @@ def run_gui(port: str, school: bool = False) -> None:
 
         show_step(STEP_ORDER[0])
 
-        def reset_current_step():
+        def _current_step_sliders():
+            """(step_key, slider specs, slider vars) for whichever Step/mode
+            is currently showing -- Step6 reads from its active mode instead
+            of a top-level 'sliders' list, everything else doesn't."""
             step_key = active_step_var.get()
             if step_key == 'step6':
-                mode_def = STEP_DEFS['step6']['modes'][link.step6_mode]
-                for s in mode_def['sliders']:
-                    step_slider_vars['step6'][s['key']].set(s['default'])
-            else:
-                for s in STEP_DEFS[step_key]['sliders']:
-                    step_slider_vars[step_key][s['key']].set(s['default'])
+                return step_key, STEP_DEFS['step6']['modes'][link.step6_mode]['sliders'], step_slider_vars['step6']
+            return step_key, STEP_DEFS[step_key]['sliders'], step_slider_vars[step_key]
+
+        def reset_current_step():
+            """0にリセット: back to the (0, or Step7's own untouched
+            default) starting point -- see each slider's `default` above."""
+            step_key, sliders, svars = _current_step_sliders()
+            for s in sliders:
+                svars[s['key']].set(s['default'])
+            apply_step_sliders(step_key)
+
+        def apply_reference_values():
+            """お手本値を代入: the verified/hardware-proven value for each
+            slider (`reference` above), for when you want a working
+            starting point instead of building up from 0. Step7 has no
+            `reference` (see its comment) -- falls back to `default`,
+            which for Step7 alone already *is* the working value."""
+            step_key, sliders, svars = _current_step_sliders()
+            for s in sliders:
+                svars[s['key']].set(s.get('reference', s['default']))
             apply_step_sliders(step_key)
 
         button_row = ttk.Frame(school_frame)
         button_row.pack(fill="x", pady=(6, 0))
-        ttk.Button(button_row, text="このStepの既定値にリセット",
+        ttk.Button(button_row, text="0にリセット",
                    command=reset_current_step).pack(side="left")
+        ttk.Button(button_row, text="お手本値を代入",
+                   command=apply_reference_values).pack(side="left", padx=(8, 0))
 
         capture_row = ttk.Frame(school_frame)
         capture_row.pack(fill="x", pady=(6, 0))
