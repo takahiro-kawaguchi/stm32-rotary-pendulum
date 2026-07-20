@@ -47,7 +47,7 @@ from pathlib import Path
 import numpy as np
 import serial
 from scipy.linalg import solve_continuous_are
-from scipy.signal import cont2discrete, savgol_filter
+from scipy.signal import cont2discrete
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 
@@ -144,11 +144,10 @@ MODEL_K     = 0.4456    # rad/s^2 of phi_ddot per rad/s^2 of u, at theta_p=0
 
 def rebuild_model_matrices() -> None:
     """(Re)builds every numpy matrix derived from MODEL_W0_SQ/MODEL_GAMMA/
-    MODEL_K. Called once at import time below, and again by Step7's school-
-    mode system-ID "採用する" button (see identify_model()/STEP7_SYSID
-    below) after it overwrites those three constants -- without this, live
-    system identification would have no effect at all, since the matrices
-    used to be bare module-level literals computed only once."""
+    MODEL_K. Called once at import time below. Split out as its own
+    function (rather than bare module-level literals) so any future code
+    that retunes those three constants at runtime has a single place to
+    call to propagate the change into every dependent matrix/gain."""
     global _MODEL_A, _MODEL_B, _MODEL_Ad, _MODEL_Bd, _LQR_A, _LQR_B
     _MODEL_A = np.array([
         [0.0,         1.0,          0.0],
@@ -1020,8 +1019,12 @@ def apply_step6_inverted_sliders(Kp: float, Kd: float, k1: float, k2: float) -> 
     STEP6_INVERTED_PARAMS.update(Kp_rotor=Kp, Kd_rotor=Kd, k1=k1, k2=k2)
 
 
-def apply_step7_slider(phi_max_deg: float) -> None:
-    LQR_PARAMS['phi_max_deg'] = phi_max_deg
+def apply_step7_sliders(**kwargs) -> None:
+    # All 5 LQR_PARAMS -- same set the instructor's advanced panel exposes
+    # (see balance_frame's lqr_keys in run_gui()), just relabeled for
+    # students. kwargs' keys match LQR_PARAMS' own keys 1:1 (see
+    # STEP_DEFS['step7']'s slider specs).
+    LQR_PARAMS.update(kwargs)
     recompute_lqr_gain()
 
 
@@ -1193,13 +1196,19 @@ STEP_DEFS = {
     ),
     'step7': dict(
         label="Step7: LQR体験",
-        challenge="許容ふらつきを変えてLQRゲインの変化を観察しよう。まずは下で「励振」してモデルを同定してみよう。",
+        challenge="許容ふらつきを変えてLQRゲインの変化を観察しよう。",
+        # Full LQR_PARAMS, same 5 knobs the instructor's advanced panel
+        # exposes (see balance_frame's lqr_keys in run_gui()) -- not just
+        # phi_max_deg, so students can see the whole Bryson's-rule picture.
         sliders=(
-            dict(key='phi_max_deg', label='許容ふらつき[deg]', frm=2.0, to=10.0, default=5.0),
+            dict(key='phi_max_deg', label='phi上限[deg]', frm=1.0, to=20.0, default=5.0),
+            dict(key='theta_r_max_deg', label='theta_r上限[deg]', frm=5.0, to=90.0, default=30.0),
+            dict(key='phi_dot_max_deg_s', label='phi_dot上限[deg/s]', frm=20.0, to=400.0, default=120.0),
+            dict(key='omega_r_max_deg_s', label='omega_r上限[deg/s]', frm=50.0, to=800.0, default=300.0),
+            dict(key='u_max', label='u上限[rad/s²]', frm=0.5, to=50.0, default=3.0),
         ),
-        apply=lambda v: apply_step7_slider(v['phi_max_deg']),
+        apply=lambda v: apply_step7_sliders(**v),
         swing_gain=0.0, balance_gain=1.0, balance_controller='lqr',
-        has_sysid=True,
     ),
     'step8': dict(
         label="Step8: 振り上げ→倒立(フィナーレ)",
@@ -1211,148 +1220,6 @@ STEP_DEFS = {
     ),
 }
 STEP_ORDER = ('step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8')
-
-
-# ---------------------------------------------------------------------------
-# Step7 school-mode system identification -- 簡易版・未検証 (see the plan
-# doc's honest risk callout; this is explicitly NOT production-grade
-# identification). Lets students excite the pendulum briefly while it hangs
-# at the bottom, then fits the same linear model structure as the shipped
-# (upright-identified) MODEL_W0_SQ/GAMMA/K, so they can watch
-# "measure -> model -> control law" happen live and compare the freshly-fit
-# values against the known-good reference (see identify_model()'s R^2 vs.
-# the actual gauge of trust: closeness to the existing MODEL_* constants)
-# before deciding whether to adopt them.
-# ---------------------------------------------------------------------------
-SYSID_PARAMS = dict(
-    duration_s=18.0,
-    # steps/s^2. 2500 (the original guess) turned out to pump the pendulum
-    # well outside a small-signal range over the full 18s window -- a
-    # sustained periodic forcing has plenty of time to build up amplitude
-    # even off-resonance, and a *linear* model fit is only meaningful for
-    # small swings around the bottom equilibrium in the first place, so a
-    # gentler amplitude is both safer and more correct. Lowered 5x
-    # (2026-07-20) after real hardware showed the pendulum leaving the
-    # intended safe range; also see max_phi_deg below for a hard abort.
-    amplitude=500.0,
-    # 3 incommensurate frequencies, chosen away from the pendulum's own
-    # ~1.1 Hz hang-down natural frequency (T_down=0.906s, see MODEL_W0_SQ's
-    # comment) so u isn't correlated with the response it's exciting --
-    # see identify_model()'s docstring for why that matters.
-    freqs_hz=(0.35, 0.6, 0.9),
-    # deg, measured from hang-down (theta_p's own convention here). If the
-    # pendulum swings past this during excitation, _step_running() aborts
-    # immediately (u=0, no fit attempted) rather than let a mistuned/too-
-    # large amplitude keep driving it further -- independent of whatever
-    # `amplitude` is currently set to.
-    max_phi_deg=15.0,
-)
-
-
-class ExcitationController:
-    """Step7's "励振開始" signal: a small fixed-amplitude, open-loop
-    multisine in u, used only while the pendulum hangs at the bottom to
-    gather data for identify_model(). Deliberately open-loop -- that's what
-    makes the u/phi relationship identifiable in the first place."""
-
-    def __init__(self):
-        self._t0 = None
-
-    def start(self) -> None:
-        self._t0 = time.time()
-
-    def compute(self) -> float:
-        if self._t0 is None:
-            self.start()
-        t = time.time() - self._t0
-        p = SYSID_PARAMS
-        signal = sum(math.sin(2.0 * math.pi * f * t) for f in p['freqs_hz'])
-        return p['amplitude'] * signal / len(p['freqs_hz'])
-
-    def done(self) -> bool:
-        return self._t0 is not None and (time.time() - self._t0) >= SYSID_PARAMS['duration_s']
-
-
-def identify_model(samples):
-    """Least-squares fit of phi_ddot ~= w0_sq*phi - gamma*phi_dot + k*u from
-    a buffer of (t, theta_p_deg, omega_p_deg_s, u) samples recorded while
-    exciting the pendulum at the bottom (theta_p_deg here: 0 = hang-down,
-    the firmware's own swing-up telemetry convention).
-
-    Honest limitations (簡易版・未検証, see the plan doc):
-    - There is no phi_ddot telemetry field -- it's recovered by numerically
-      differentiating omega_p a second time, and omega_p is itself already
-      a firmware-side finite difference (see OMEGA_GLITCH_CLAMP_DEG_S's
-      docstring) that occasionally glitches. Savitzky-Golay smoothing here
-      is a mitigation, not a fix.
-    - MODEL_W0_SQ/GAMMA/K were identified near upright (an unstable
-      equilibrium); fitting the same structure from hang-down (a stable
-      equilibrium) data assumes gamma/k are equilibrium-independent, which
-      is physically plausible for a Furuta pendulum but not itself verified
-      here -- that assumption is exactly why the fit is reported against
-      the existing values for comparison rather than trusted blind.
-    - A high R^2 alone does not mean a trustworthy fit: if the excitation
-      frequency is too close to the pendulum's own natural frequency, u
-      becomes correlated with the response and the regression can look
-      great while individual coefficients are unreliable -- hence also
-      reporting the design matrix's condition number alongside R^2.
-
-    Returns a dict with w0_sq/gamma/k/r_squared/condition_number, or None
-    if too few samples were collected to attempt a fit.
-    """
-    if len(samples) < 50:
-        return None
-    t = np.array([s[0] for s in samples])
-    theta_p_deg = np.array([s[1] for s in samples])
-    omega_p_deg_s = np.array([s[2] for s in samples])
-    # samples' u is in steps/s^2 (the wire-protocol unit); MODEL_K/_MODEL_B
-    # are calibrated for rad/s^2 of u (see the one-step-ahead prediction's
-    # own `u * STEPPER_RAD_PER_STEP` in _step_running()) -- convert before
-    # fitting, or the recovered k (and, via collinearity, gamma) come out
-    # wrong by a factor of STEPPER_RAD_PER_STEP.
-    u = np.array([s[3] for s in samples]) * STEPPER_RAD_PER_STEP
-
-    dt = float(np.median(np.diff(t)))
-    if dt <= 0:
-        return None
-
-    # Reframe into the upright-relative phi convention (phi=0 at upright)
-    # that MODEL_W0_SQ/GAMMA/K are defined in -- the same +-180 deg wrap
-    # _step_running() already applies for theta_p_upright.
-    phi_deg = np.where(theta_p_deg >= 0, theta_p_deg - 180.0, theta_p_deg + 180.0)
-    phi = np.radians(phi_deg)
-    phi_dot = np.radians(omega_p_deg_s)
-
-    window = min(21, len(phi_dot) - (1 - len(phi_dot) % 2))
-    phi_dot_smooth = savgol_filter(phi_dot, window, 3) if window >= 5 else phi_dot
-    phi_ddot = np.gradient(phi_dot_smooth, dt)
-
-    A = np.column_stack([phi, phi_dot_smooth, u])
-    coeffs, _residuals, _rank, _sv = np.linalg.lstsq(A, phi_ddot, rcond=None)
-    w0_sq, neg_gamma, k = coeffs
-
-    pred = A @ coeffs
-    ss_res = float(np.sum((phi_ddot - pred) ** 2))
-    ss_tot = float(np.sum((phi_ddot - np.mean(phi_ddot)) ** 2))
-    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float('nan')
-
-    return dict(w0_sq=float(w0_sq), gamma=float(-neg_gamma), k=float(k),
-                r_squared=r_squared, condition_number=float(np.linalg.cond(A)))
-
-
-def adopt_identified_model(fit: dict) -> None:
-    """Step7's "採用する" button: overwrites MODEL_W0_SQ/GAMMA/K with a
-    identify_model() result and re-derives every matrix/gain that depends
-    on them, so the change actually reaches LQRController/KalmanObserver/
-    DisturbanceObserver immediately."""
-    global MODEL_W0_SQ, MODEL_GAMMA, MODEL_K
-    MODEL_W0_SQ = fit['w0_sq']
-    MODEL_GAMMA = fit['gamma']
-    MODEL_K = fit['k']
-    rebuild_model_matrices()
-    recompute_lqr_gain()
-    recompute_observer_gain()
-    recompute_dob_gain()
 
 
 # ---------------------------------------------------------------------------
@@ -1529,9 +1396,9 @@ class LinkManager:
         self.shadow_in_balance = False
         self._reset_pending = False
         # School mode only (see run_gui(school=True)/STEP_DEFS): the Step1-4
-        # rotor engine's controller, a group-ID tag threaded into log
-        # filenames, and Step7's excitation/system-ID state. All inert
-        # (school_mode stays False) for plain/advanced-GUI sessions.
+        # rotor engine's controller and a group-ID tag threaded into log
+        # filenames. All inert (school_mode stays False) for plain/
+        # advanced-GUI sessions.
         self.rotor_pd_ctrl = RotorPDController()
         self.school_mode = False
         self.current_step = 'step1'
@@ -1539,11 +1406,6 @@ class LinkManager:
         # ('coupled'/'independent'/'inverted') -- see build_step6_tab().
         self.step6_mode = 'coupled'
         self.group_tag = ''
-        self.excite_ctrl = ExcitationController()
-        self.sysid_active = False
-        self._sysid_buffer = []
-        self.sysid_result = None
-        self.sysid_aborted = False
         # Mode to start when `start_requested` fires. 'B' = PC computes u
         # once caught (DualPidController, active_control=True), onboard
         # bang-bang swing-up first. 'C' = PC also drives swing-up from
@@ -1656,29 +1518,17 @@ class LinkManager:
             STEP_GAINS['balance_gain'] = step_def.get('balance_gain', 1.0)
             if step_def.get('balance_controller') is not None:
                 self.balance_controller = step_def['balance_controller']
+                if step_def['balance_controller'] == 'lqr':
+                    # Whenever LQR becomes the active controller, default to
+                    # the Kalman-filtered state estimate rather than raw
+                    # telemetry -- see on_balance_ctrl_change() in run_gui()
+                    # for the same rule applied when the advanced panel's own
+                    # PID/LQR radio is used directly.
+                    self.lqr_state_source = 'observer'
             # else: Step8 -- the GUI's own PID/LQR radio already set
             # self.balance_controller directly; Step5 doesn't care
             # (balance_gain=0 zeroes its output regardless of which
             # controller would have run).
-        if step_key != 'step7':
-            # Never leave an excitation running in the background once the
-            # student has switched away from Step7's tab.
-            self.sysid_active = False
-
-    def start_excitation(self) -> None:
-        """Step7's "励振開始" button -- only meaningful while RUNNING and
-        origin_mode=='down' (the GUI gates the button on that); see the
-        down-phase dispatch in _step_running()."""
-        self.excite_ctrl.start()
-        self._sysid_buffer = []
-        self.sysid_result = None
-        self.sysid_aborted = False
-        self.sysid_active = True
-
-    def adopt_sysid_result(self) -> None:
-        """Step7's "採用する" button."""
-        if self.sysid_result is not None:
-            adopt_identified_model(self.sysid_result)
 
     def run(self):
         try:
@@ -1737,10 +1587,6 @@ class LinkManager:
             self._startup_kick_start = None
             self.shadow_ctrl = DualPidController()
             self.shadow_in_balance = False
-            self.sysid_active = False
-            self._sysid_buffer = []
-            self.sysid_result = None
-            self.sysid_aborted = False
             for d in self.data:
                 d.clear()
             self.target_data.clear()
@@ -1951,29 +1797,9 @@ class LinkManager:
                     self.observer.reset()
                     self.dob.reset()
                     self.swing_ctrl.reset()
-                if self.school_mode and self.current_step == 'step7' and self.sysid_active:
-                    # Step7's "励振開始": a brief open-loop excitation
-                    # instead of the (otherwise passive, balance_gain-only)
-                    # down phase -- see ExcitationController/identify_model.
-                    if abs(theta_p) > SYSID_PARAMS['max_phi_deg']:
-                        # Safety abort: the excitation has pushed the
-                        # pendulum outside the small-signal range this fit
-                        # assumes (see SYSID_PARAMS['max_phi_deg']'s
-                        # comment) -- stop immediately rather than fit on
-                        # (or keep driving further into) a big swing.
-                        self.sysid_active = False
-                        self.sysid_aborted = True
-                        u = 0.0
-                    else:
-                        u = self.excite_ctrl.compute()
-                        self._sysid_buffer.append((time.time(), theta_p, omega_p, u))
-                        if self.excite_ctrl.done():
-                            self.sysid_active = False
-                            self.sysid_result = identify_model(self._sysid_buffer)
-                else:
-                    u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
-                    if self.school_mode:
-                        u *= STEP_GAINS['swing_gain']
+                u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+                if self.school_mode:
+                    u *= STEP_GAINS['swing_gain']
             self._last_u_python = u
 
             # Up-mode only: one-step-ahead prediction from MODEL_A/B/_MODEL_Ad
@@ -2214,6 +2040,15 @@ def run_gui(port: str, school: bool = False) -> None:
 
     def on_balance_ctrl_change():
         link.balance_controller = balance_ctrl_var.get()
+        if link.balance_controller == 'lqr':
+            # Default to the Kalman-filtered state estimate rather than raw
+            # telemetry whenever LQR becomes active (same rule
+            # set_current_step() applies for Step7) -- lqr_source_var is
+            # defined further down in this function, but by the time this
+            # callback can actually fire (a button click) the whole GUI is
+            # already built, so the forward reference is safe.
+            link.lqr_state_source = 'observer'
+            lqr_source_var.set('observer')
 
     ttk.Radiobutton(balance_frame, text="PID (DualPidController)", variable=balance_ctrl_var,
                      value='pid', command=on_balance_ctrl_change).grid(row=0, column=0, columnspan=4, sticky="w")
@@ -2295,7 +2130,6 @@ def run_gui(port: str, school: bool = False) -> None:
     capture_stats = {'A': None, 'B': None}
     capture_label_vars = {'A': tk.StringVar(value='記録A: -'), 'B': tk.StringVar(value='記録B: -')}
     step_slider_vars = {}   # step_key -> {slider_key: DoubleVar}
-    sysid_ui = {}           # 'result_var' stashed here so tick() can update it
     notebook = None
 
     if school:
@@ -2499,35 +2333,6 @@ def run_gui(port: str, school: bool = False) -> None:
                 ttk.Radiobutton(choice_frame, text="LQR (Step7)", variable=balance_ctrl_var,
                                 value='lqr', command=on_balance_ctrl_change).pack(side="left", padx=(8, 0))
 
-            if step_def.get('has_sysid'):
-                sysid_frame = ttk.LabelFrame(frame, text="簡易システム同定(未検証)", padding=6)
-                sysid_frame.pack(fill="x", pady=(10, 0))
-                ttk.Label(sysid_frame, wraplength=760, justify="left", text=(
-                    "振り子が下で静止しているときだけ使えます。約18秒励振してモデルを推定し、"
-                    "既に倒立状態で分かっている値と比べて妥当かを確認してから採用してください。"
-                    "簡易版・未検証の機能です。"
-                )).pack(fill="x")
-                result_var = tk.StringVar(value="(まだ推定していません)")
-                sysid_ui['result_var'] = result_var
-                ttk.Label(sysid_frame, textvariable=result_var, justify="left").pack(fill="x", pady=(4, 4))
-                btn_row = ttk.Frame(sysid_frame)
-                btn_row.pack(fill="x")
-
-                def do_start_excitation():
-                    if link.state == STATE_RUNNING and link.origin_mode == 'down':
-                        link.start_excitation()
-                        sysid_ui['_last_shown'] = None
-                        sysid_ui['_aborted_shown'] = False
-                        result_var.set("励振中…")
-
-                def do_adopt():
-                    link.adopt_sysid_result()
-                    result_var.set(
-                        f"採用しました: w0_sq={MODEL_W0_SQ:.3f}  gamma={MODEL_GAMMA:.4f}  k={MODEL_K:.4f}")
-
-                ttk.Button(btn_row, text="励振開始", command=do_start_excitation).pack(side="left")
-                ttk.Button(btn_row, text="採用する", command=do_adopt).pack(side="left", padx=(8, 0))
-
         def on_tab_change(event=None):
             # Applies live, even mid-session -- see set_current_step()'s
             # docstring for why switching Steps doesn't need a Stop/Start.
@@ -2618,27 +2423,6 @@ def run_gui(port: str, school: bool = False) -> None:
         mode_c_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_d_radio.state(['!disabled'] if at_prompt else ['disabled'])
-
-        if school:
-            # Only (re-)render when a *new* fit object shows up -- otherwise
-            # this would stomp on the "採用しました" message do_adopt() sets,
-            # since link.sysid_result itself doesn't change on adopt.
-            if ('result_var' in sysid_ui and link.sysid_result is not None
-                    and link.sysid_result is not sysid_ui.get('_last_shown')):
-                sysid_ui['_last_shown'] = link.sysid_result
-                fit = link.sysid_result
-                sysid_ui['result_var'].set(
-                    f"推定結果: w0_sq={fit['w0_sq']:.2f} (既存値{MODEL_W0_SQ:.2f})  "
-                    f"gamma={fit['gamma']:.4f} (既存値{MODEL_GAMMA:.4f})  "
-                    f"k={fit['k']:.4f} (既存値{MODEL_K:.4f})  "
-                    f"R²={fit['r_squared']:.3f}  条件数={fit['condition_number']:.1f}")
-
-            if ('result_var' in sysid_ui and link.sysid_aborted
-                    and not sysid_ui.get('_aborted_shown')):
-                sysid_ui['_aborted_shown'] = True
-                sysid_ui['result_var'].set(
-                    "安全のため励振を中断しました(振れが大きくなりすぎました)。"
-                    "振幅を下げて再挑戦してください。")
 
         if link.selected_mode == 'C' and link.state == STATE_RUNNING:
             if link.origin_mode == 'up':
