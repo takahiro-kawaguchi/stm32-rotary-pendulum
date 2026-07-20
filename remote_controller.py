@@ -197,10 +197,38 @@ LQR_PARAMS = dict(
 )
 _lqr_state = {'K': None}
 
+# School mode Step7 only: DualPidController-equivalent gains derived from
+# the LQR gain K, so Step7 can teach LQR design (tune Q/R-style bounds,
+# watch K change) while what actually gets *sent* to hardware is the
+# battle-tested DualPidController -- 2026-07-20, after live testing showed
+# PID holding noticeably more reliably than the raw state-feedback
+# LQRController (whose own docstring already notes it trusts telemetry's
+# omega_p/omega_r directly, unlike DualPidController's filtered
+# self-computed derivative -- see OMEGA_GLITCH_CLAMP_DEG_S's comment for
+# the concrete incident that traced back to exactly that difference).
+#
+# Derivation: LQRController computes u_rad_s2 = -(K @ [phi, theta_r,
+# phi_dot, omega_r]), u = u_rad_s2 / STEPPER_RAD_PER_STEP. DualPidController
+# (force_steady=True, Ki_comp=0, ignoring the derivative IIR filter's phase
+# lag) computes u = Kp_pend*e_p + Kd_pend*e_p_dot + Kp_rotor*e_r +
+# Kd_rotor*e_r_dot, where e_p = ENCODER_ANGLE_POLARITY*phi/STEPPER_RAD_PER_STEP
+# and e_r = theta_r/STEPPER_RAD_PER_STEP (no polarity flip on the rotor
+# terms). Matching coefficients term-by-term and using
+# ENCODER_ANGLE_POLARITY = -1.0:
+#   Kp_pend = K[0]      Kd_pend = K[2]
+#   Kp_rotor = -K[1]    Kd_rotor = -K[3]
+# Sanity-checked against the live-tuned LQR_PARAMS default (u_max=3.0):
+# K=[354.2, -5.73, 50.23, -5.15] -> Kp_pend=354, Kd_pend=50, Kp_rotor=5.7,
+# Kd_rotor=5.2 -- all four positive (the sign a PD gain "should" have) and
+# in the same ballpark as STEADY_GAINS' own hand-tuned 300/30/15/7.5, a
+# reassuring cross-check that the mapping is directionally correct.
+LQR_EQUIVALENT_PID = dict(Kp_pend=0.0, Kd_pend=0.0, Kp_rotor=0.0, Kd_rotor=0.0, Ki_comp=0.0)
+
 
 def recompute_lqr_gain():
-    """(Re)computes the LQR gain from the current LQR_PARAMS. Called once
-    at import time below, and again by the GUI's Apply button whenever
+    """(Re)computes the LQR gain from the current LQR_PARAMS, and its
+    DualPidController-equivalent (LQR_EQUIVALENT_PID, see above). Called
+    once at import time below, and again by the GUI's Apply button whenever
     LQR_PARAMS changes."""
     p = LQR_PARAMS
     Q = np.diag([
@@ -212,6 +240,12 @@ def recompute_lqr_gain():
     R = np.array([[1.0 / p['u_max'] ** 2]])
     P = solve_continuous_are(_LQR_A, _LQR_B, Q, R)
     _lqr_state['K'] = np.linalg.solve(R, _LQR_B.T @ P)
+
+    K = _lqr_state['K'].flatten()
+    LQR_EQUIVALENT_PID['Kp_pend'] = float(K[0])
+    LQR_EQUIVALENT_PID['Kd_pend'] = float(K[2])
+    LQR_EQUIVALENT_PID['Kp_rotor'] = float(-K[1])
+    LQR_EQUIVALENT_PID['Kd_rotor'] = float(-K[3])
 
 
 recompute_lqr_gain()
@@ -481,13 +515,18 @@ class DualPidController:
         return pid_execute(Kp, Ki, Kd, error, prev_error, state, lpf, self._ts)
 
     def compute(self, theta_p_deg: float, theta_r_deg: float,
-                rotor_ref: float = 0.0, force_steady: bool = False) -> float:
+                rotor_ref: float = 0.0, force_steady: bool = False,
+                gains: dict = None) -> float:
         """force_steady: skip the CATCH_GAINS phase and use STEADY_GAINS from
         the first sample — Mode C's up-mode control uses this; Mode B leaves
-        it False to keep its existing (well-tuned) catch/steady schedule."""
-        in_catch_phase = (not force_steady
-                and (time.time() - self._catch_start_time) < CATCH_PHASE_DURATION_S)
-        gains = CATCH_GAINS if in_catch_phase else STEADY_GAINS
+        it False to keep its existing (well-tuned) catch/steady schedule.
+        gains: bypass the CATCH_GAINS/STEADY_GAINS schedule entirely and use
+        this dict instead (school mode Step7 passes LQR_EQUIVALENT_PID) --
+        force_steady is ignored when gains is given."""
+        if gains is None:
+            in_catch_phase = (not force_steady
+                    and (time.time() - self._catch_start_time) < CATCH_PHASE_DURATION_S)
+            gains = CATCH_GAINS if in_catch_phase else STEADY_GAINS
 
         theta_p = math.radians(theta_p_deg)
         theta_r = math.radians(theta_r_deg)
@@ -1196,7 +1235,7 @@ STEP_DEFS = {
     ),
     'step7': dict(
         label="Step7: LQR体験",
-        challenge="許容ふらつきを変えてLQRゲインの変化を観察しよう。",
+        challenge="許容ふらつきを変えてLQRゲインの変化を観察しよう。下の換算PIDゲインも一緒に見てみよう。",
         # Full LQR_PARAMS, same 5 knobs the instructor's advanced panel
         # exposes (see balance_frame's lqr_keys in run_gui()) -- not just
         # phi_max_deg, so students can see the whole Bryson's-rule picture.
@@ -1208,14 +1247,29 @@ STEP_DEFS = {
             dict(key='u_max', label='u上限[rad/s²]', frm=0.5, to=50.0, default=3.0),
         ),
         apply=lambda v: apply_step7_sliders(**v),
-        swing_gain=0.0, balance_gain=1.0, balance_controller='lqr',
+        # balance_controller is 'pid', not 'lqr' -- these sliders design an
+        # LQR gain (recompute_lqr_gain() still solves the Riccati equation
+        # live), but what's actually SENT is DualPidController running the
+        # LQR-equivalent gains (LQR_EQUIVALENT_PID, see its derivation
+        # comment) rather than raw state feedback -- see the school-mode
+        # dispatch in _step_running(). More reliable in practice (PID's own
+        # filtered derivative vs. LQRController trusting telemetry's
+        # omega_p/omega_r directly), while still teaching the LQR design
+        # process end to end.
+        swing_gain=0.0, balance_gain=1.0, balance_controller='pid',
     ),
     'step8': dict(
         label="Step8: 振り上げ→倒立(フィナーレ)",
         challenge="Step5の振り上げとStep6/7の倒立制御をつなげて、通しで見てみよう。",
         sliders=(),
         apply=lambda v: None,
-        swing_gain=1.0, balance_gain=1.0, balance_controller=None,  # chosen via radio button
+        # balance_controller chosen via the "上側(倒立後)の制御則" radio
+        # (has_controller_choice below) -- 'pid' reuses whatever Step6 last
+        # tuned (STEADY_GAINS); 'lqr' reuses whatever Step7 last tuned too
+        # (LQR_EQUIVALENT_PID, same DualPidController-via-LQR-gains path as
+        # Step7 -- see the school_lqr_as_pid dispatch in _step_running()),
+        # not a fresh/independent LQR run.
+        swing_gain=1.0, balance_gain=1.0, balance_controller=None,
         has_controller_choice=True,
     ),
 }
@@ -1720,7 +1774,11 @@ class LinkManager:
             # LQRController self.balance_controller currently selects, fed
             # theta_p_upright so both controllers' "0 = upright" assumptions
             # hold regardless of which side the pendulum approached from.
-            active_ctrl = self.lqr_ctrl if self.balance_controller == 'lqr' else self.ctrl
+            school_lqr_as_pid = (self.school_mode and self.current_step in ('step7', 'step8')
+                                  and self.balance_controller == 'lqr')
+            active_ctrl = (self.ctrl if school_lqr_as_pid
+                            else self.lqr_ctrl if self.balance_controller == 'lqr'
+                            else self.ctrl)
             phi_dot_hat_deg = theta_r_hat_deg = phi_hat_deg = omega_r_hat_deg = d_hat_deg_s2 = None
             if abs(theta_r) > ROTOR_LIMIT_DEG:
                 u = 0.0
@@ -1740,12 +1798,25 @@ class LinkManager:
                         # grow, not what happens after it first arrives.
                         self.stop_requested.set()
                     active_ctrl.enter_capture(theta_p_upright, theta_r)
-                    if self.balance_controller == 'lqr' and self.lqr_state_source == 'observer':
+                    if not school_lqr_as_pid and self.balance_controller == 'lqr' and self.lqr_state_source == 'observer':
                         self.observer.enter_capture(theta_p_upright, theta_r, rotor_ref_steps)
-                    elif self.balance_controller == 'lqr' and self.lqr_state_source == 'observer_dob':
+                    elif not school_lqr_as_pid and self.balance_controller == 'lqr' and self.lqr_state_source == 'observer_dob':
                         self.dob.enter_capture(theta_p_upright, theta_r, rotor_ref_steps)
                     self.in_balance = True
-                if self.balance_controller == 'lqr':
+                if school_lqr_as_pid:
+                    # School mode's "LQR" always means DualPidController
+                    # running the gains derived from the LQR design
+                    # (LQR_EQUIVALENT_PID) instead of LQRController's raw
+                    # state feedback -- see STEP_DEFS' step7 comment for why.
+                    # Step8 sharing this branch (not just step7) is what
+                    # makes "whatever was tuned in Step7 carries straight
+                    # into Step8's finale" true: LQR_EQUIVALENT_PID is one
+                    # live global, not something re-derived per step.
+                    u = self.ctrl.compute(theta_p_upright, theta_r, rotor_ref_steps,
+                                           gains=LQR_EQUIVALENT_PID)
+                elif self.balance_controller == 'lqr':
+                    # Advanced/instructor GUI only (school mode never reaches
+                    # here) -- genuine full-state-feedback LQRController.
                     if self.lqr_state_source == 'observer':
                         u_prev_rad_s2 = self._last_u_python * STEPPER_RAD_PER_STEP
                         x_hat = self.observer.update(theta_p_upright, theta_r, u_prev_rad_s2, rotor_ref_steps)
@@ -2130,6 +2201,7 @@ def run_gui(port: str, school: bool = False) -> None:
     capture_stats = {'A': None, 'B': None}
     capture_label_vars = {'A': tk.StringVar(value='記録A: -'), 'B': tk.StringVar(value='記録B: -')}
     step_slider_vars = {}   # step_key -> {slider_key: DoubleVar}
+    step7_pid_var = None    # live LQR_EQUIVALENT_PID readout, updated in tick()
     notebook = None
 
     if school:
@@ -2321,6 +2393,16 @@ def run_gui(port: str, school: bool = False) -> None:
                 step_slider_vars[step_key][s['key']] = var
                 make_slider_row(slider_frame, i, var, s, apply_current_step_sliders)
 
+            if step_key == 'step7':
+                # Live readout of LQR_EQUIVALENT_PID (see its derivation
+                # comment near recompute_lqr_gain()) -- updated in tick()
+                # whenever the sliders above (re-)solve the LQR gain, so
+                # students can watch the design process land on a concrete
+                # PID before it's ever sent to hardware.
+                step7_pid_var = tk.StringVar(value="換算PIDゲイン: (計算中)")
+                ttk.Label(frame, textvariable=step7_pid_var, wraplength=800,
+                          justify="left").pack(fill="x", pady=(10, 0))
+
             if step_def.get('has_controller_choice'):
                 # Step8: reuse the existing advanced-panel PID/LQR selector
                 # (balance_ctrl_var/on_balance_ctrl_change, defined above for
@@ -2423,6 +2505,12 @@ def run_gui(port: str, school: bool = False) -> None:
         mode_c_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_d_radio.state(['!disabled'] if at_prompt else ['disabled'])
+
+        if step7_pid_var is not None:
+            p = LQR_EQUIVALENT_PID
+            step7_pid_var.set(
+                f"→ 換算PIDゲイン: Kp_pend={p['Kp_pend']:.1f}  Kd_pend={p['Kd_pend']:.1f}  "
+                f"Kp_rotor={p['Kp_rotor']:.1f}  Kd_rotor={p['Kd_rotor']:.1f}")
 
         if link.selected_mode == 'C' and link.state == STATE_RUNNING:
             if link.origin_mode == 'up':
