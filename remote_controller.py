@@ -14,6 +14,9 @@ Mode B remote controller for STM32 inverted pendulum.
 Usage:
     python remote_controller.py [PORT]          # CLI mode (auto-starts Mode B)
     python remote_controller.py [PORT] --gui     # GUI mode: live plot + Start/Stop
+    python remote_controller.py [PORT] --school  # simplified slider GUI for
+                                                  # high-school outreach sessions
+                                                  # (see STEP_DEFS)
 
 Telemetry from STM32:  i,theta_p_deg,theta_r_deg,omega_p_deg_s,omega_r_deg_s,u_last
 Command to STM32:      'u <steps_per_s2>\\r'    (during balance loop)
@@ -44,7 +47,7 @@ from pathlib import Path
 import numpy as np
 import serial
 from scipy.linalg import solve_continuous_are
-from scipy.signal import cont2discrete
+from scipy.signal import cont2discrete, savgol_filter
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 
@@ -94,6 +97,13 @@ CATCH_PHASE_DURATION_S = 10.0
 CATCH_GAINS = dict(Kp_pend=419.0, Kd_pend=56.0, Kp_rotor=21.1, Kd_rotor=17.2, Ki_comp=10.0)
 STEADY_GAINS = dict(Kp_pend=300.0, Kd_pend=30.0, Kp_rotor=15.0, Kd_rotor=7.5, Ki_comp=0.0)
 
+# School-mode Station 2 slider baseline: an untouched snapshot of the
+# hand-tuned STEADY_GAINS above, taken before any GUI slider can mutate it,
+# so "responsiveness"/"damping" sliders are multipliers on the known-good
+# values (and can be reset to them exactly) instead of drifting from
+# whatever a previous rotation group left behind.
+_BASE_STEADY_GAINS = dict(STEADY_GAINS)
+
 # ---------------------------------------------------------------------------
 # Derivative IIR low-pass filter coefficients
 # Matches STM32 pid_execute filter with same corner frequencies:
@@ -130,14 +140,34 @@ _LP_ROTOR = _lpf_coeffs(50.0,  _TS)   # (a0, a1) for rotor derivative
 MODEL_W0_SQ = 48.0553   # rad^2/s^2  (T_down = 0.906 s at theta_p=0)
 MODEL_GAMMA = 0.1757    # 1/s        (zeta = 0.013, lightly damped)
 MODEL_K     = 0.4456    # rad/s^2 of phi_ddot per rad/s^2 of u, at theta_p=0
-_MODEL_A = np.array([
-    [0.0,         1.0,          0.0],
-    [MODEL_W0_SQ, -MODEL_GAMMA, 0.0],
-    [0.0,         0.0,          0.0],
-])
-_MODEL_B = np.array([[0.0], [MODEL_K], [1.0]])
-_MODEL_Ad, _MODEL_Bd, *_ = cont2discrete(
-    (_MODEL_A, _MODEL_B, np.eye(3), np.zeros((3, 1))), _TS, method='zoh')
+
+
+def rebuild_model_matrices() -> None:
+    """(Re)builds every numpy matrix derived from MODEL_W0_SQ/MODEL_GAMMA/
+    MODEL_K. Called once at import time below, and again by Step7's school-
+    mode system-ID "採用する" button (see identify_model()/STEP7_SYSID
+    below) after it overwrites those three constants -- without this, live
+    system identification would have no effect at all, since the matrices
+    used to be bare module-level literals computed only once."""
+    global _MODEL_A, _MODEL_B, _MODEL_Ad, _MODEL_Bd, _LQR_A, _LQR_B
+    _MODEL_A = np.array([
+        [0.0,         1.0,          0.0],
+        [MODEL_W0_SQ, -MODEL_GAMMA, 0.0],
+        [0.0,         0.0,          0.0],
+    ])
+    _MODEL_B = np.array([[0.0], [MODEL_K], [1.0]])
+    _MODEL_Ad, _MODEL_Bd, *_ = cont2discrete(
+        (_MODEL_A, _MODEL_B, np.eye(3), np.zeros((3, 1))), _TS, method='zoh')
+    _LQR_A = np.array([
+        [0.0,         0.0, 1.0,          0.0],
+        [0.0,         0.0, 0.0,          1.0],
+        [MODEL_W0_SQ, 0.0, -MODEL_GAMMA, 0.0],
+        [0.0,         0.0, 0.0,          0.0],
+    ])
+    _LQR_B = np.array([[0.0], [0.0], [MODEL_K], [1.0]])
+
+
+rebuild_model_matrices()
 
 # ---------------------------------------------------------------------------
 # LQR balance controller (Mode C up-mode only, see LQRController below) --
@@ -166,13 +196,6 @@ LQR_PARAMS = dict(
     # is the first value confirmed to hold a stable, sustained inversion.
     u_max=3.0,
 )
-_LQR_A = np.array([
-    [0.0,         0.0, 1.0,          0.0],
-    [0.0,         0.0, 0.0,          1.0],
-    [MODEL_W0_SQ, 0.0, -MODEL_GAMMA, 0.0],
-    [0.0,         0.0, 0.0,          0.0],
-])
-_LQR_B = np.array([[0.0], [0.0], [MODEL_K], [1.0]])
 _lqr_state = {'K': None}
 
 
@@ -331,6 +354,7 @@ ROTOR_LIMIT_DEG  = 200.0    # send u=0 when rotor exceeds this
 # right before the cutoff) — i.e. the controller was recovering it, but got
 # cut off early. Widened to give oscillations more room to damp out.
 PEND_CAPTURE_DEG =  60.0
+
 
 # Mode C only: GUI-tunable margin (degrees) for LinkManager.origin_mode's
 # down/up switch -- how close to upright before Python starts treating "up"
@@ -837,6 +861,501 @@ class SwingUpController:
 
 
 # ---------------------------------------------------------------------------
+# School mode: a simplified, slider-driven layer for high-school outreach
+# sessions, built on top of everything above rather than replacing it (see
+# STEP_DEFS and run_gui(school=True) below). Eight sequential "Steps"
+# (following 計画.md), all riding firmware wire mode 'C' (the one protocol
+# that streams telemetry and accepts Python 'u' commands from t=0 with no
+# onboard swing-up attempt of its own):
+#
+#   Step1-4 run a pendulum-blind "rotor engine" (raw u / RotorPDController)
+#     that never looks at origin_mode/up-down phase at all -- see the
+#     STEPS_WITH_ROTOR_ENGINE dispatch in LinkManager._step_running().
+#   Step5-8 do NOT get their own controllers. They reuse the swing-up +
+#     balance engine that already exists in _step_running()'s Mode C block
+#     (SwingUpController for the down phase, DualPidController/LQRController
+#     for the up phase, switching automatically on origin_mode) completely
+#     unmodified, and just scale each phase's output by STEP_GAINS:
+#       Step5 (振り上げ):        swing_gain=1, balance_gain=0 -- pumps
+#         energy in but never catches, so students can watch the swing grow
+#         without a capture attempt cutting it short.
+#       Step6 (倒立制御, PID):    swing_gain=0, balance_gain=1 -- rotor is
+#         passive (u=0) until manually lifted into the capture zone, then
+#         DualPidController holds it.
+#       Step7 (LQR体験):         swing_gain=0, balance_gain=1, same idea
+#         but LQRController instead of PID.
+#       Step8 (フィナーレ):       swing_gain=1, balance_gain=1 -- the
+#         engine's original, undiminished behaviour: autonomous swing-up
+#         straight into a catch, PID or LQR chosen live via radio button.
+#     This is deliberately NOT "swap in a different controller per step" --
+#     it's the exact same engine every time, just with 0/1 gains on its two
+#     halves, which is both far less code than per-step controller objects
+#     and a nice callback to the whole course's "what happens when you turn
+#     a gain to 0?" theme.
+#
+# Sliders are always multipliers/interpolations/direct-but-bounded values
+# over a pre-vetted baseline, never free-text gain entry.
+# ---------------------------------------------------------------------------
+STEP1_PARAMS = dict(u=0.0)
+
+ROTOR_PD_PARAMS = dict(Kp_rotor=20.0, Kd_rotor=0.0, u_max=20000.0, target_deg=0.0)
+_BASE_ROTOR_PD_PARAMS = dict(ROTOR_PD_PARAMS)
+
+# Step4: k1 (position) and k2 (velocity) are gains applied DIRECTLY to the
+# pendulum's own angle/angular velocity and added straight into u, alongside
+# (not routed through) Step2/3's rotor-position PD -- k1*theta_p + k2*omega_p
+# is a second, independent feedback term, not a target for the rotor loop.
+# (2026-07-20: originally wired as a *target* for the shared rotor-position
+# PD, i.e. u included a Kp*k1 product -- that made k1/k2's actual effect on
+# the pendulum silently depend on whatever Kp Step2/3 happened to be left
+# at, defeating the point of sharing Kp/Kd with them. Additive instead of
+# nested keeps Kp/Kd sharing meaningful: Step2/3 tune "how hard the rotor
+# holds its position," k1/k2 tune "how hard the pendulum's own state pushes
+# back," and the two no longer multiply together.) Exposed as independent
+# sliders so students can discover empirically which term (and which sign/
+# magnitude) actually damps the free-hanging pendulum fastest, per
+# 計画.md's open question ("どういうルールで目標値を決めたら振り子が素早く
+# 止まるだろうか？").
+STEP4_PARAMS = dict(k1=0.0, k2=0.0)
+
+
+class RotorPDController:
+    """Rotor-position PD used by Steps 2-4 and Step6's "反転版" mode. Unlike
+    a fixed-setpoint controller, target_deg is supplied fresh by the caller
+    every cycle -- Step2/3/4 all pass ROTOR_PD_PARAMS['target_deg'] (Step4
+    adds its own k1/k2 pendulum feedback separately, on top of this
+    controller's output -- see STEP4_PARAMS and its dispatch in
+    _step_running()); Step6-inverted passes k1*phi_deg + k2*phi_dot_deg_s
+    instead (see STEP6_INVERTED_PARAMS), the one case that still nests it
+    as a target. No internal state to reset between sessions since there's
+    nothing to prime. `params` defaults to ROTOR_PD_PARAMS (Steps 2-4's own
+    gains); pass STEP6_INVERTED_PARAMS explicitly to use Step6's independent
+    set instead, so tuning one doesn't disturb the other."""
+
+    def compute(self, theta_r_deg: float, omega_r_deg: float, target_deg: float,
+                params: dict = None) -> float:
+        p = params if params is not None else ROTOR_PD_PARAMS
+        error = theta_r_deg - target_deg
+        u = -p['Kp_rotor'] * error - p['Kd_rotor'] * omega_r_deg
+        return max(-p['u_max'], min(p['u_max'], u))
+
+
+def apply_step2_sliders(target_deg: float, Kp: float) -> None:
+    ROTOR_PD_PARAMS.update(target_deg=target_deg, Kp_rotor=Kp, Kd_rotor=0.0)
+
+
+def apply_step3_sliders(target_deg: float, Kp: float, Kd: float) -> None:
+    ROTOR_PD_PARAMS.update(target_deg=target_deg, Kp_rotor=Kp, Kd_rotor=Kd)
+
+
+def apply_step4_sliders(Kp: float, Kd: float, k1: float, k2: float) -> None:
+    # Kp/Kd write into the same ROTOR_PD_PARAMS dict Step2/3 use (so the
+    # rotor-position PD itself is the identical mechanism), but Step4's own
+    # slider values (see STEP_DEFS's step4, no `shared` tag) are what's
+    # actually in effect while Step4's tab is active -- switching to this
+    # tab re-applies them, overwriting whatever Step2/3 last left behind.
+    # See STEP_DEFS['step4']'s comment for why Kp/Kd are independent here.
+    # k1/k2 (STEP4_PARAMS) are ADDED to u directly, alongside the rotor PD's
+    # own output -- see the dispatch in _step_running() and STEP4_PARAMS'
+    # comment for why additive, not nested.
+    ROTOR_PD_PARAMS['Kp_rotor'] = Kp
+    ROTOR_PD_PARAMS['Kd_rotor'] = Kd
+    STEP4_PARAMS.update(k1=k1, k2=k2)
+
+
+def apply_step5_sliders(**kwargs) -> None:
+    # 8 of SWINGUP_PARAMS' 9 knobs -- same full set the instructor's
+    # advanced panel exposes (see swingup_frame in run_gui()), just
+    # relabeled/grouped for students, minus rotor_ki (see below). kwargs'
+    # keys match SWINGUP_PARAMS' own keys 1:1 (see STEP_DEFS['step5']'s
+    # slider specs).
+    SWINGUP_PARAMS.update(kwargs)
+    # 2026-07-20: I control removed from Step5's own tuning -- the swing-up
+    # rotor PID works fine without it (P+D alone tracks the bang-bang
+    # target well enough; see SwingUpController's docstring), and dropping
+    # it is one fewer knob for students to reason about. Forced to 0 here
+    # (rather than just omitting its slider) so Step5 always runs without
+    # it regardless of whatever the advanced panel's own rotor_ki slider
+    # (still exposed there, unaffected) currently shows.
+    SWINGUP_PARAMS['rotor_ki'] = 0.0
+
+
+def apply_step6_sliders(responsiveness: float, damping: float) -> None:
+    # Scale pend/rotor gains together so the pend:rotor authority ratio the
+    # file's own hardware tuning already found (~20:1, see CATCH_GAINS'
+    # comment) stays invariant under the slider.
+    STEADY_GAINS['Kp_pend']  = _BASE_STEADY_GAINS['Kp_pend']  * responsiveness
+    STEADY_GAINS['Kp_rotor'] = _BASE_STEADY_GAINS['Kp_rotor'] * responsiveness
+    STEADY_GAINS['Kd_pend']  = _BASE_STEADY_GAINS['Kd_pend']  * damping
+    STEADY_GAINS['Kd_rotor'] = _BASE_STEADY_GAINS['Kd_rotor'] * damping
+
+
+def apply_step6_independent_sliders(Kp_pend: float, Kd_pend: float,
+                                     Kp_rotor: float, Kd_rotor: float) -> None:
+    # Same STEADY_GAINS dict as the coupled "responsiveness/damping" mode
+    # above, but each of the 4 gains is set directly -- no ratio-preserving
+    # multiplier, so the pend:rotor authority balance is no longer protected.
+    # Lets students discover *why* that ~20:1 ratio matters by being free to
+    # break it.
+    STEADY_GAINS.update(Kp_pend=Kp_pend, Kd_pend=Kd_pend, Kp_rotor=Kp_rotor, Kd_rotor=Kd_rotor)
+
+
+# Step6's "反転版(Step4方式)" mode: the exact target=k1*phi+k2*phi_dot ->
+# rotor-position-PD structure from Step4 (STEPS_WITH_ROTOR_ENGINE), reused
+# near upright instead of hang-down. Numerically confirmed NOT to admit any
+# stabilizing (Kp>0, Kd, k1, k2) combination (2026-07-20: a 500k-sample
+# random search over the full 4-state closed loop A-B*K_eff found stable
+# solutions only for Kp<0, which breaks the "same intuitive P gain as
+# Step4" framing entirely -- LQR's own optimal gain has a theta_r-coefficient
+# of the opposite sign a plain position-PD would need, a genuinely coupled
+# MIMO effect this single-target-value structure can't reach). Kept anyway,
+# deliberately, as a "watch it fail and see why" exploration -- see the
+# conversation this was designed in for the full derivation -- rather than
+# silently omitted, per explicit request to experience the reversed version
+# before deciding the final course structure.
+STEP6_INVERTED_PARAMS = dict(Kp_rotor=20.0, Kd_rotor=0.0, u_max=20000.0, k1=-1.0, k2=-0.5)
+
+
+def apply_step6_inverted_sliders(Kp: float, Kd: float, k1: float, k2: float) -> None:
+    STEP6_INVERTED_PARAMS.update(Kp_rotor=Kp, Kd_rotor=Kd, k1=k1, k2=k2)
+
+
+def apply_step7_slider(phi_max_deg: float) -> None:
+    LQR_PARAMS['phi_max_deg'] = phi_max_deg
+    recompute_lqr_gain()
+
+
+# Multiplies the swing-up/balance engine's two halves on/off per step (see
+# the module comment above) -- read directly by LinkManager._step_running()
+# only when school_mode is True; the plain/advanced --gui mode is unaffected.
+STEP_GAINS = dict(swing_gain=1.0, balance_gain=1.0)
+
+STEPS_WITH_ROTOR_ENGINE = ('step1', 'step2', 'step3', 'step4')
+
+# step key -> label, challenge text, slider specs, and (for step5-8) the
+# STEP_GAINS/balance_controller this step drives. The GUI reads this dict
+# alone to build each tab's panel -- wording/ranges can be re-tuned here
+# without touching layout code.
+STEP_DEFS = {
+    'step1': dict(
+        label="Step1: 観察",
+        challenge="uを変えてロータの動きを観察しよう。uを0に戻しても慣性で動き続ける?",
+        sliders=(
+            dict(key='u', label='入力 u [steps/s²]', frm=-3000.0, to=3000.0, default=0.0),
+        ),
+        apply=lambda v: STEP1_PARAMS.__setitem__('u', v['u']),
+    ),
+    'step2': dict(
+        label="Step2: 比例制御",
+        challenge="比例ゲインKpを変えてみよう。目標角度に近づく? 振動しない?",
+        # target_deg/Kp use `shared` tags (see run_gui()'s shared_slider_vars)
+        # so Step2<->Step3 share the exact same value -- Step3 = Step2 +
+        # a Kd term, not a separate independent setup, so switching between
+        # them shouldn't reset what was already tuned.
+        sliders=(
+            dict(key='target_deg', label='目標角度[deg]', frm=-90.0, to=90.0, default=0.0,
+                 shared='rotor_target_deg'),
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0, shared='rotor_Kp'),
+        ),
+        apply=lambda v: apply_step2_sliders(v['target_deg'], v['Kp']),
+    ),
+    'step3': dict(
+        label="Step3: 微分制御",
+        challenge="Kdを追加してみよう。振動がどう変わる? オーバーシュートの境界は?",
+        sliders=(
+            dict(key='target_deg', label='目標角度[deg]', frm=-90.0, to=90.0, default=0.0,
+                 shared='rotor_target_deg'),
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0, shared='rotor_Kp'),
+            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0, shared='rotor_Kd'),
+        ),
+        apply=lambda v: apply_step3_sliders(v['target_deg'], v['Kp'], v['Kd']),
+    ),
+    'step4': dict(
+        label="Step4: 振り子を下側で止める",
+        challenge="振り子の角度・角速度にかかるゲインk1・k2を足してみよう。どちらが・どの符号でよく効く?",
+        # Kp/Kd are Step4's OWN independent gains (2026-07-20: unshared from
+        # Step2/3's 'rotor_Kp'/'rotor_Kd' tags again -- even with k1/k2 now
+        # additive rather than nested in the target [see STEP4_PARAMS'
+        # comment], Step2/3's choice of Kp/Kd still changes the ROTOR
+        # SUBSYSTEM's own bandwidth, which changes which *sign* of k2 damps
+        # the pendulum well: with Kp=20 the rotor responds slower than the
+        # pendulum's free swing and k2>0 helps, but with Kp=1500 [swing-up
+        # scale] the rotor becomes faster than the pendulum and the
+        # relationship flips -- k2>0 destabilizes, k2<0 (roughly -100..-250)
+        # is what works instead. Independent sliders mean Step4 always
+        # starts from ONE verified, self-consistent (Kp, Kd, k1, k2) point,
+        # not something whose meaning shifts depending on what Step2/3
+        # happen to currently show. target_deg is NOT one of Step4's own
+        # sliders (see _step_running()'s dispatch) -- it still reads
+        # ROTOR_PD_PARAMS['target_deg'], i.e. whatever Step2/3 last set (0.0
+        # if untouched); revisit if that turns out to matter in practice.
+        #
+        # Defaults/ranges verified 2026-07-20 against the closed-loop
+        # eigenvalues of a down-side linearized model (theta_p near 0 =
+        # hang-down; same construction as _LQR_A/_LQR_B but with the sign
+        # flips that equilibrium requires -- see the conversation this was
+        # derived in), at THIS step's own Kp=20/Kd=10. Findings, in case
+        # these ever need retuning:
+        #   - Kd=0 leaves the rotor loop completely undamped -- a marginal
+        #     +-1.5j pole with Kp=20, independent of k1/k2 -- and any
+        #     nonzero k1/k2 then tips that marginal pole slightly unstable.
+        #     Kd needs to be meaningfully nonzero, hence the default (10.0).
+        #   - k2 (velocity term) has a strong, clean, monotonic effect at
+        #     this Kp/Kd: k2=-10 is already clearly unstable (worst
+        #     eigenvalue +0.17), k2=+10..+30 cuts the pendulum's settling
+        #     time by roughly 3-6x versus k2=0. This is the dominant knob
+        #     -- but see the note above: the sign that helps is NOT fixed,
+        #     it depends on Kp/Kd's own value relative to the pendulum's
+        #     ~6.9 rad/s natural frequency.
+        #   - k1 (position term) has a much weaker direct effect in the
+        #     full 4-state system than a naive 2-state approximation
+        #     suggests (the rotor's own ~1.5 rad/s response here is slower
+        #     than the pendulum's free swing, so it can't track fast enough
+        #     for k1 alone to matter much) -- kept at a small positive
+        #     default per 計画.md's own hypothesis ("重心位置を目標値に
+        #     する"), but k2 is where the real effect is at this Kp/Kd.
+        sliders=(
+            dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0),
+            dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=10.0),
+            # k1/k2 ranges widened 2026-07-20: a Bryson's-rule LQR design
+            # swept across tighter theta_p_max_deg tolerances (30 deg down
+            # to 1 deg) landed k1 anywhere from ~27 up to ~1550 and k2 from
+            # ~10 up to ~177 -- the old +-30/+-30 only covered the loosest
+            # end of that range. k1's own range given extra headroom above
+            # that ~1550 ceiling (matching Kp's own 2000 span) since it's
+            # the one that kept climbing fastest as tolerance tightened.
+            dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=10.0),
+            dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=20.0),
+        ),
+        apply=lambda v: apply_step4_sliders(v['Kp'], v['Kd'], v['k1'], v['k2']),
+    ),
+    'step5': dict(
+        label="Step5: 振り上げ",
+        challenge="振り上げのパラメータを変えて、エネルギーの入れ方を観察しよう。",
+        # 8 of SWINGUP_PARAMS' 9 knobs the instructor's advanced panel
+        # exposes -- rotor_ki omitted (see apply_step5_sliders(), forced to
+        # 0 for this step).
+        sliders=(
+            dict(key='stage0_deg', label='初期振幅Stage0[deg]', frm=10.0, to=35.0, default=22.5),
+            dict(key='stage1_deg', label='中間振幅Stage1[deg]', frm=5.0, to=25.0, default=14.625),
+            dict(key='stage2_deg', label='後半振幅Stage2[deg]', frm=5.0, to=20.0, default=13.5),
+            dict(key='stage1_threshold_deg', label='しきい値1[deg]', frm=50.0, to=150.0, default=90.0),
+            dict(key='stage2_threshold_deg', label='しきい値2[deg]', frm=100.0, to=200.0, default=150.0),
+            dict(key='rotor_kp', label='ロータ比例Kp', frm=500.0, to=3000.0, default=1500.0),
+            dict(key='rotor_kd', label='ロータ微分Kd', frm=0.0, to=400.0, default=150.0),
+            dict(key='rotor_u_max', label='ロータu上限', frm=5000.0, to=30000.0, default=20000.0),
+        ),
+        apply=lambda v: apply_step5_sliders(**v),
+        swing_gain=1.0, balance_gain=0.0, balance_controller=None,
+    ),
+    'step6': dict(
+        label="Step6: 倒立制御",
+        challenge="手で上まで持っていくと倒立制御が始まるよ。調整方法を切り替えて比べてみよう。",
+        # Step6 has 3 distinct slider sets (see run_gui()'s build_step6_tab) --
+        # a mode radio button switches between them live. No top-level
+        # 'sliders'/'apply' here (unlike every other step) -- see modes[...]
+        # instead, keyed the same way link.step6_mode is.
+        modes={
+            'coupled': dict(
+                mode_label="まとめて調整",
+                sliders=(
+                    dict(key='responsiveness', label='反応の速さ', frm=0.5, to=1.8, default=1.0),
+                    dict(key='damping', label='揺れの抑え方', frm=0.5, to=2.0, default=1.0),
+                ),
+                apply=lambda v: apply_step6_sliders(v['responsiveness'], v['damping']),
+            ),
+            'independent': dict(
+                mode_label="個別調整",
+                sliders=(
+                    dict(key='Kp_pend', label='比例ゲイン(振り子)', frm=0.0, to=600.0, default=300.0),
+                    dict(key='Kd_pend', label='微分ゲイン(振り子)', frm=0.0, to=100.0, default=30.0),
+                    dict(key='Kp_rotor', label='比例ゲイン(ロータ)', frm=0.0, to=60.0, default=15.0),
+                    dict(key='Kd_rotor', label='微分ゲイン(ロータ)', frm=0.0, to=30.0, default=7.5),
+                ),
+                apply=lambda v: apply_step6_independent_sliders(
+                    v['Kp_pend'], v['Kd_pend'], v['Kp_rotor'], v['Kd_rotor']),
+            ),
+            'inverted': dict(
+                mode_label="反転版(Step4方式)",
+                # Ranges match Step4's own (2026-07-20) so a value copied in
+                # via "Step4の値を反映" always fits without the slider
+                # clamping it down to a narrower span on the next touch.
+                sliders=(
+                    dict(key='Kp', label='比例ゲインKp', frm=0.0, to=2000.0, default=20.0),
+                    dict(key='Kd', label='微分ゲインKd', frm=0.0, to=200.0, default=0.0),
+                    dict(key='k1', label='位置比例 k1', frm=-2000.0, to=2000.0, default=-1.0),
+                    dict(key='k2', label='速度比例 k2', frm=-200.0, to=200.0, default=-0.5),
+                ),
+                apply=lambda v: apply_step6_inverted_sliders(v['Kp'], v['Kd'], v['k1'], v['k2']),
+            ),
+        },
+        swing_gain=0.0, balance_gain=1.0, balance_controller='pid',
+    ),
+    'step7': dict(
+        label="Step7: LQR体験",
+        challenge="許容ふらつきを変えてLQRゲインの変化を観察しよう。まずは下で「励振」してモデルを同定してみよう。",
+        sliders=(
+            dict(key='phi_max_deg', label='許容ふらつき[deg]', frm=2.0, to=10.0, default=5.0),
+        ),
+        apply=lambda v: apply_step7_slider(v['phi_max_deg']),
+        swing_gain=0.0, balance_gain=1.0, balance_controller='lqr',
+        has_sysid=True,
+    ),
+    'step8': dict(
+        label="Step8: 振り上げ→倒立(フィナーレ)",
+        challenge="Step5の振り上げとStep6/7の倒立制御をつなげて、通しで見てみよう。",
+        sliders=(),
+        apply=lambda v: None,
+        swing_gain=1.0, balance_gain=1.0, balance_controller=None,  # chosen via radio button
+        has_controller_choice=True,
+    ),
+}
+STEP_ORDER = ('step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8')
+
+
+# ---------------------------------------------------------------------------
+# Step7 school-mode system identification -- 簡易版・未検証 (see the plan
+# doc's honest risk callout; this is explicitly NOT production-grade
+# identification). Lets students excite the pendulum briefly while it hangs
+# at the bottom, then fits the same linear model structure as the shipped
+# (upright-identified) MODEL_W0_SQ/GAMMA/K, so they can watch
+# "measure -> model -> control law" happen live and compare the freshly-fit
+# values against the known-good reference (see identify_model()'s R^2 vs.
+# the actual gauge of trust: closeness to the existing MODEL_* constants)
+# before deciding whether to adopt them.
+# ---------------------------------------------------------------------------
+SYSID_PARAMS = dict(
+    duration_s=18.0,
+    # steps/s^2. 2500 (the original guess) turned out to pump the pendulum
+    # well outside a small-signal range over the full 18s window -- a
+    # sustained periodic forcing has plenty of time to build up amplitude
+    # even off-resonance, and a *linear* model fit is only meaningful for
+    # small swings around the bottom equilibrium in the first place, so a
+    # gentler amplitude is both safer and more correct. Lowered 5x
+    # (2026-07-20) after real hardware showed the pendulum leaving the
+    # intended safe range; also see max_phi_deg below for a hard abort.
+    amplitude=500.0,
+    # 3 incommensurate frequencies, chosen away from the pendulum's own
+    # ~1.1 Hz hang-down natural frequency (T_down=0.906s, see MODEL_W0_SQ's
+    # comment) so u isn't correlated with the response it's exciting --
+    # see identify_model()'s docstring for why that matters.
+    freqs_hz=(0.35, 0.6, 0.9),
+    # deg, measured from hang-down (theta_p's own convention here). If the
+    # pendulum swings past this during excitation, _step_running() aborts
+    # immediately (u=0, no fit attempted) rather than let a mistuned/too-
+    # large amplitude keep driving it further -- independent of whatever
+    # `amplitude` is currently set to.
+    max_phi_deg=15.0,
+)
+
+
+class ExcitationController:
+    """Step7's "励振開始" signal: a small fixed-amplitude, open-loop
+    multisine in u, used only while the pendulum hangs at the bottom to
+    gather data for identify_model(). Deliberately open-loop -- that's what
+    makes the u/phi relationship identifiable in the first place."""
+
+    def __init__(self):
+        self._t0 = None
+
+    def start(self) -> None:
+        self._t0 = time.time()
+
+    def compute(self) -> float:
+        if self._t0 is None:
+            self.start()
+        t = time.time() - self._t0
+        p = SYSID_PARAMS
+        signal = sum(math.sin(2.0 * math.pi * f * t) for f in p['freqs_hz'])
+        return p['amplitude'] * signal / len(p['freqs_hz'])
+
+    def done(self) -> bool:
+        return self._t0 is not None and (time.time() - self._t0) >= SYSID_PARAMS['duration_s']
+
+
+def identify_model(samples):
+    """Least-squares fit of phi_ddot ~= w0_sq*phi - gamma*phi_dot + k*u from
+    a buffer of (t, theta_p_deg, omega_p_deg_s, u) samples recorded while
+    exciting the pendulum at the bottom (theta_p_deg here: 0 = hang-down,
+    the firmware's own swing-up telemetry convention).
+
+    Honest limitations (簡易版・未検証, see the plan doc):
+    - There is no phi_ddot telemetry field -- it's recovered by numerically
+      differentiating omega_p a second time, and omega_p is itself already
+      a firmware-side finite difference (see OMEGA_GLITCH_CLAMP_DEG_S's
+      docstring) that occasionally glitches. Savitzky-Golay smoothing here
+      is a mitigation, not a fix.
+    - MODEL_W0_SQ/GAMMA/K were identified near upright (an unstable
+      equilibrium); fitting the same structure from hang-down (a stable
+      equilibrium) data assumes gamma/k are equilibrium-independent, which
+      is physically plausible for a Furuta pendulum but not itself verified
+      here -- that assumption is exactly why the fit is reported against
+      the existing values for comparison rather than trusted blind.
+    - A high R^2 alone does not mean a trustworthy fit: if the excitation
+      frequency is too close to the pendulum's own natural frequency, u
+      becomes correlated with the response and the regression can look
+      great while individual coefficients are unreliable -- hence also
+      reporting the design matrix's condition number alongside R^2.
+
+    Returns a dict with w0_sq/gamma/k/r_squared/condition_number, or None
+    if too few samples were collected to attempt a fit.
+    """
+    if len(samples) < 50:
+        return None
+    t = np.array([s[0] for s in samples])
+    theta_p_deg = np.array([s[1] for s in samples])
+    omega_p_deg_s = np.array([s[2] for s in samples])
+    # samples' u is in steps/s^2 (the wire-protocol unit); MODEL_K/_MODEL_B
+    # are calibrated for rad/s^2 of u (see the one-step-ahead prediction's
+    # own `u * STEPPER_RAD_PER_STEP` in _step_running()) -- convert before
+    # fitting, or the recovered k (and, via collinearity, gamma) come out
+    # wrong by a factor of STEPPER_RAD_PER_STEP.
+    u = np.array([s[3] for s in samples]) * STEPPER_RAD_PER_STEP
+
+    dt = float(np.median(np.diff(t)))
+    if dt <= 0:
+        return None
+
+    # Reframe into the upright-relative phi convention (phi=0 at upright)
+    # that MODEL_W0_SQ/GAMMA/K are defined in -- the same +-180 deg wrap
+    # _step_running() already applies for theta_p_upright.
+    phi_deg = np.where(theta_p_deg >= 0, theta_p_deg - 180.0, theta_p_deg + 180.0)
+    phi = np.radians(phi_deg)
+    phi_dot = np.radians(omega_p_deg_s)
+
+    window = min(21, len(phi_dot) - (1 - len(phi_dot) % 2))
+    phi_dot_smooth = savgol_filter(phi_dot, window, 3) if window >= 5 else phi_dot
+    phi_ddot = np.gradient(phi_dot_smooth, dt)
+
+    A = np.column_stack([phi, phi_dot_smooth, u])
+    coeffs, _residuals, _rank, _sv = np.linalg.lstsq(A, phi_ddot, rcond=None)
+    w0_sq, neg_gamma, k = coeffs
+
+    pred = A @ coeffs
+    ss_res = float(np.sum((phi_ddot - pred) ** 2))
+    ss_tot = float(np.sum((phi_ddot - np.mean(phi_ddot)) ** 2))
+    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float('nan')
+
+    return dict(w0_sq=float(w0_sq), gamma=float(-neg_gamma), k=float(k),
+                r_squared=r_squared, condition_number=float(np.linalg.cond(A)))
+
+
+def adopt_identified_model(fit: dict) -> None:
+    """Step7's "採用する" button: overwrites MODEL_W0_SQ/GAMMA/K with a
+    identify_model() result and re-derives every matrix/gain that depends
+    on them, so the change actually reaches LQRController/KalmanObserver/
+    DisturbanceObserver immediately."""
+    global MODEL_W0_SQ, MODEL_GAMMA, MODEL_K
+    MODEL_W0_SQ = fit['w0_sq']
+    MODEL_GAMMA = fit['gamma']
+    MODEL_K = fit['k']
+    rebuild_model_matrices()
+    recompute_lqr_gain()
+    recompute_observer_gain()
+    recompute_dob_gain()
+
+
+# ---------------------------------------------------------------------------
 # CLI mode (unchanged behaviour)
 # ---------------------------------------------------------------------------
 
@@ -970,6 +1489,11 @@ class LinkManager:
         # whichever origin Python currently treats as 0, see _step_running()
         # -- other modes: theta_p as-is), theta_r, u.
         self.data = [deque(maxlen=MAX_POINTS) for _ in range(3)]
+        # School mode Steps 2/3 only: the rotor's commanded target_deg each
+        # cycle, plotted overlaid on the rotor-angle series (see run_gui())
+        # so students can see actual-vs-target directly instead of only
+        # inferring tracking quality from the rotor line alone.
+        self.target_data = deque(maxlen=MAX_POINTS)
         self.ctrl = DualPidController()
         self.lqr_ctrl = LQRController()
         # Mode C up-mode only: which balance controller is currently active,
@@ -1004,6 +1528,22 @@ class LinkManager:
         self.shadow_ctrl = DualPidController()
         self.shadow_in_balance = False
         self._reset_pending = False
+        # School mode only (see run_gui(school=True)/STEP_DEFS): the Step1-4
+        # rotor engine's controller, a group-ID tag threaded into log
+        # filenames, and Step7's excitation/system-ID state. All inert
+        # (school_mode stays False) for plain/advanced-GUI sessions.
+        self.rotor_pd_ctrl = RotorPDController()
+        self.school_mode = False
+        self.current_step = 'step1'
+        # Step6 only: which of STEP_DEFS['step6']['modes'] is active
+        # ('coupled'/'independent'/'inverted') -- see build_step6_tab().
+        self.step6_mode = 'coupled'
+        self.group_tag = ''
+        self.excite_ctrl = ExcitationController()
+        self.sysid_active = False
+        self._sysid_buffer = []
+        self.sysid_result = None
+        self.sysid_aborted = False
         # Mode to start when `start_requested` fires. 'B' = PC computes u
         # once caught (DualPidController, active_control=True), onboard
         # bang-bang swing-up first. 'C' = PC also drives swing-up from
@@ -1038,7 +1578,8 @@ class LinkManager:
 
     def _open_log(self):
         LOG_DIR.mkdir(exist_ok=True)
-        path = LOG_DIR / f"log_{time.strftime('%Y%m%d_%H%M%S')}_mode{self.selected_mode}.csv"
+        tag = f"_group{self.group_tag}" if self.group_tag else ""
+        path = LOG_DIR / f"log_{time.strftime('%Y%m%d_%H%M%S')}_mode{self.selected_mode}{tag}.csv"
         self._log_file = open(path, 'w', newline='')
         self._log_writer = csv.writer(self._log_file)
         self._log_writer.writerow(['time_s', 'i', 'theta_p_deg', 'theta_r_deg',
@@ -1099,6 +1640,46 @@ class LinkManager:
             return True
         return cls._looks_like_telemetry(line)
 
+    def set_current_step(self, step_key: str) -> None:
+        """Applies a Step's swing/balance gains and controller choice.
+        Called both when Start is pressed and live whenever the GUI's Step
+        tab changes (run_gui()'s on_tab_change()) -- including mid-session,
+        so switching Steps takes effect on the very next telemetry sample
+        instead of requiring a Stop/Start (and therefore a firmware reboot,
+        since 'q' always triggers one) between every Step. Steps 1-4 (the
+        rotor engine, dispatched separately in _step_running()) have no
+        gains/controller to set here."""
+        self.current_step = step_key
+        if step_key not in STEPS_WITH_ROTOR_ENGINE:
+            step_def = STEP_DEFS[step_key]
+            STEP_GAINS['swing_gain'] = step_def.get('swing_gain', 1.0)
+            STEP_GAINS['balance_gain'] = step_def.get('balance_gain', 1.0)
+            if step_def.get('balance_controller') is not None:
+                self.balance_controller = step_def['balance_controller']
+            # else: Step8 -- the GUI's own PID/LQR radio already set
+            # self.balance_controller directly; Step5 doesn't care
+            # (balance_gain=0 zeroes its output regardless of which
+            # controller would have run).
+        if step_key != 'step7':
+            # Never leave an excitation running in the background once the
+            # student has switched away from Step7's tab.
+            self.sysid_active = False
+
+    def start_excitation(self) -> None:
+        """Step7's "励振開始" button -- only meaningful while RUNNING and
+        origin_mode=='down' (the GUI gates the button on that); see the
+        down-phase dispatch in _step_running()."""
+        self.excite_ctrl.start()
+        self._sysid_buffer = []
+        self.sysid_result = None
+        self.sysid_aborted = False
+        self.sysid_active = True
+
+    def adopt_sysid_result(self) -> None:
+        """Step7's "採用する" button."""
+        if self.sysid_result is not None:
+            adopt_identified_model(self.sysid_result)
+
     def run(self):
         try:
             while not self.quit.is_set():
@@ -1131,6 +1712,16 @@ class LinkManager:
     def _step_at_prompt(self):
         if self.start_requested.is_set():
             self.start_requested.clear()
+            if self.school_mode:
+                # Every Step rides wire mode 'C' unconditionally (see the
+                # module comment above STEP_DEFS). set_current_step() (also
+                # called live by the GUI whenever the Step tab changes, even
+                # mid-session -- see run_gui()'s on_tab_change()) applies
+                # this step's STEP_GAINS/balance_controller; re-applying it
+                # here too is just a harmless double-check in case Start is
+                # pressed before any tab-change callback has fired yet.
+                self.selected_mode = 'C'
+                self.set_current_step(self.current_step)
             self.active_control = self.selected_mode in ('B', 'C')
             self.ser.write((self.selected_mode + '\r').encode())
             self.ctrl = DualPidController()
@@ -1146,8 +1737,13 @@ class LinkManager:
             self._startup_kick_start = None
             self.shadow_ctrl = DualPidController()
             self.shadow_in_balance = False
+            self.sysid_active = False
+            self._sysid_buffer = []
+            self.sysid_result = None
+            self.sysid_aborted = False
             for d in self.data:
                 d.clear()
+            self.target_data.clear()
             self._open_log()
             self._set_state(STATE_RUNNING)
             return
@@ -1197,29 +1793,64 @@ class LinkManager:
 
         i_idx, theta_p, theta_r, omega_p, omega_r, u_prev = vals
 
+        if self.selected_mode == 'C' and not self._startup_kick_done:
+            # Hardware sanity-check pulse, fired once at the very start of
+            # every Mode C session regardless of which Step is selected
+            # (school mode always rides wire 'C' -- see the module comment
+            # above STEP_DEFS) -- must run *before* the Steps 1-4 rotor
+            # engine dispatch below, which would otherwise return early and
+            # skip this entirely every time a session starts on Step1-4.
+            if self._startup_kick_start is None:
+                self._startup_kick_start = time.time()
+            elapsed = time.time() - self._startup_kick_start
+
+            if elapsed < STARTUP_KICK_DURATION_S:
+                u = STARTUP_KICK_U
+            elif elapsed < STARTUP_KICK_DURATION_S + STARTUP_RETURN_DURATION_S:
+                u = max(-STARTUP_RETURN_U_MAX, min(STARTUP_RETURN_U_MAX,
+                        -STARTUP_RETURN_KP * theta_r - STARTUP_RETURN_KD * omega_r))
+            else:
+                u = 0.0
+                self._startup_kick_done = True
+
+            self.ser.write(f'u {u:.1f}\r'.encode())
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev,
+                              u, theta_p, self.origin_mode)
+            self.data[0].append(theta_p)
+            self.data[1].append(theta_r)
+            self.data[2].append(u)
+            return
+
+        if self.school_mode and self.current_step in STEPS_WITH_ROTOR_ENGINE:
+            # Steps 1-4: a pendulum-blind rotor engine, entirely separate
+            # from Mode C's swing-up/balance dispatch below (see the module
+            # comment above STEP_DEFS).
+            if self.current_step == 'step1':
+                u = STEP1_PARAMS['u']
+            elif self.current_step in ('step2', 'step3'):
+                target_deg = ROTOR_PD_PARAMS['target_deg']
+                u = self.rotor_pd_ctrl.compute(theta_r, omega_r, target_deg)
+                self.target_data.append(target_deg)
+            else:  # step4
+                # Same rotor-position PD as Step2/3 (shared Kp/Kd AND
+                # target_deg -- see apply_step4_sliders), PLUS a direct,
+                # independent pendulum feedback term added straight into u
+                # (not folded into target_deg -- see STEP4_PARAMS' comment
+                # for why additive beats nested here).
+                target_deg = ROTOR_PD_PARAMS['target_deg']
+                u_rotor = self.rotor_pd_ctrl.compute(theta_r, omega_r, target_deg)
+                u = u_rotor + STEP4_PARAMS['k1'] * theta_p + STEP4_PARAMS['k2'] * omega_p
+                self.target_data.append(target_deg)
+            if abs(theta_r) > ROTOR_LIMIT_DEG:
+                u = 0.0
+            self.ser.write(f'u {u:.1f}\r'.encode())
+            self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev, u)
+            self.data[0].append(theta_p)
+            self.data[1].append(theta_r)
+            self.data[2].append(u)
+            return
+
         if self.selected_mode == 'C':
-            if not self._startup_kick_done:
-                if self._startup_kick_start is None:
-                    self._startup_kick_start = time.time()
-                elapsed = time.time() - self._startup_kick_start
-
-                if elapsed < STARTUP_KICK_DURATION_S:
-                    u = STARTUP_KICK_U
-                elif elapsed < STARTUP_KICK_DURATION_S + STARTUP_RETURN_DURATION_S:
-                    u = max(-STARTUP_RETURN_U_MAX, min(STARTUP_RETURN_U_MAX,
-                            -STARTUP_RETURN_KP * theta_r - STARTUP_RETURN_KD * omega_r))
-                else:
-                    u = 0.0
-                    self._startup_kick_done = True
-
-                self.ser.write(f'u {u:.1f}\r'.encode())
-                self._log_sample(i_idx, theta_p, theta_r, omega_p, omega_r, u_prev,
-                                  u, theta_p, self.origin_mode)
-                self.data[0].append(theta_p)
-                self.data[1].append(theta_r)
-                self.data[2].append(u)
-                return
-
             # Mode C: firmware always reports theta_p in the same "0 = hang
             # down" convention app_run_swing_up()'s own telemetry uses (Src/
             # app_session.c) -- it never tries to guess which side is
@@ -1254,6 +1885,14 @@ class LinkManager:
                 self.dob.reset()
             elif self.origin_mode == 'up':
                 if not self.in_balance:
+                    if self.school_mode and self.current_step == 'step5':
+                        # Step5: stop right as the swing-up first reaches the
+                        # upright zone, instead of quietly going passive
+                        # (balance_gain=0 already keeps it from catching)
+                        # and cycling back down to swing up again. The point
+                        # of this step is watching the energy-pumping swing
+                        # grow, not what happens after it first arrives.
+                        self.stop_requested.set()
                     active_ctrl.enter_capture(theta_p_upright, theta_r)
                     if self.balance_controller == 'lqr' and self.lqr_state_source == 'observer':
                         self.observer.enter_capture(theta_p_upright, theta_r, rotor_ref_steps)
@@ -1276,21 +1915,65 @@ class LinkManager:
                         d_hat_deg_s2 = math.degrees(x_hat[4])
                     else:
                         u = self.lqr_ctrl.compute(theta_p_upright, theta_r, omega_p, omega_r, rotor_ref_steps)
+                elif (self.school_mode and self.current_step == 'step6'
+                        and self.step6_mode == 'inverted'):
+                    # "反転版": Step4's own target=k1*phi+k2*phi_dot ->
+                    # rotor-position-PD mechanism, reused near upright with
+                    # its own independent gains (STEP6_INVERTED_PARAMS) --
+                    # NOT expected to stabilize with Kp>0 (verified
+                    # numerically, see STEP6_INVERTED_PARAMS' comment); kept
+                    # as a deliberate "watch it fail" exploration.
+                    p = STEP6_INVERTED_PARAMS
+                    target_deg = p['k1'] * theta_p_upright + p['k2'] * omega_p
+                    u = self.rotor_pd_ctrl.compute(theta_r, omega_r, target_deg, params=p)
                 else:
                     u = self.ctrl.compute(theta_p_upright, theta_r, rotor_ref_steps, force_steady=True)
+                if self.school_mode:
+                    u *= STEP_GAINS['balance_gain']
             else:
                 if self.in_balance:
                     # Was catching, escaped back down -- clear catch state
                     # and start the swing controller fresh instead of
                     # resuming whatever stale derivative state it had from
                     # before capture.
+                    #
+                    # Step6 only: once a hand-caught inversion falls back
+                    # out of the capture zone, stop the session outright
+                    # (same path the GUI's own Stop button uses) instead of
+                    # going passive and waiting to be lifted again -- Step6
+                    # is meant as one deliberate catch-and-hold attempt per
+                    # run, not a repeat-until-it-sticks loop.
+                    if self.school_mode and self.current_step == 'step6':
+                        self.stop_requested.set()
                     self.in_balance = False
                     self.ctrl.reset()
                     self.lqr_ctrl.reset()
                     self.observer.reset()
                     self.dob.reset()
                     self.swing_ctrl.reset()
-                u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+                if self.school_mode and self.current_step == 'step7' and self.sysid_active:
+                    # Step7's "励振開始": a brief open-loop excitation
+                    # instead of the (otherwise passive, balance_gain-only)
+                    # down phase -- see ExcitationController/identify_model.
+                    if abs(theta_p) > SYSID_PARAMS['max_phi_deg']:
+                        # Safety abort: the excitation has pushed the
+                        # pendulum outside the small-signal range this fit
+                        # assumes (see SYSID_PARAMS['max_phi_deg']'s
+                        # comment) -- stop immediately rather than fit on
+                        # (or keep driving further into) a big swing.
+                        self.sysid_active = False
+                        self.sysid_aborted = True
+                        u = 0.0
+                    else:
+                        u = self.excite_ctrl.compute()
+                        self._sysid_buffer.append((time.time(), theta_p, omega_p, u))
+                        if self.excite_ctrl.done():
+                            self.sysid_active = False
+                            self.sysid_result = identify_model(self._sysid_buffer)
+                else:
+                    u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+                    if self.school_mode:
+                        u *= STEP_GAINS['swing_gain']
             self._last_u_python = u
 
             # Up-mode only: one-step-ahead prediction from MODEL_A/B/_MODEL_Ad
@@ -1371,7 +2054,7 @@ class LinkManager:
         self.data[2].append(u)
 
 
-def run_gui(port: str) -> None:
+def run_gui(port: str, school: bool = False) -> None:
     # Imported lazily so plain CLI usage never requires matplotlib/tkinter.
     import tkinter as tk
     from tkinter import ttk
@@ -1393,12 +2076,38 @@ def run_gui(port: str) -> None:
     print(f"Connected: {port}  {BAUD} baud")
 
     link = LinkManager(ser)
+    link.school_mode = school
     link_thread = threading.Thread(target=link.run, daemon=True)
     link_thread.start()
 
     root = tk.Tk()
     root.title("STM32 Pendulum — Remote Controller")
     root.geometry("900x650")
+
+    # School mode only: the instructor-facing "詳細設定" toggle (see below)
+    # shows/hides the advanced widgets collected here instead of them always
+    # being packed -- students only ever see the simplified school_frame
+    # (Step1-8 Notebook tabs) built further down. group_var is declared
+    # unconditionally (harmless when school=False) so do_start()/tick() can
+    # reference it without branching everywhere.
+    advanced_items = []
+
+    def pack_maybe(widget, **kwargs):
+        if not school:
+            widget.pack(**kwargs)
+        else:
+            advanced_items.append((widget, kwargs))
+
+    def toggle_advanced():
+        if toggle_advanced.visible:
+            for widget, _ in advanced_items:
+                widget.pack_forget()
+        else:
+            for widget, kwargs in advanced_items:
+                widget.pack(**kwargs)
+        toggle_advanced.visible = not toggle_advanced.visible
+
+    toggle_advanced.visible = False
 
     top = ttk.Frame(root, padding=8)
     top.pack(fill="x")
@@ -1412,11 +2121,13 @@ def run_gui(port: str) -> None:
     # law is reconnected.
     origin_mode_var = tk.StringVar(value="原点: —")
     origin_mode_label = ttk.Label(top, textvariable=origin_mode_var, font=("", 10, "bold"))
-    origin_mode_label.pack(side="left", padx=(16, 0))
+    pack_maybe(origin_mode_label, side="left", padx=(16, 0))
 
-    ttk.Label(top, text="真上しきい値[deg]").pack(side="left", padx=(16, 2))
+    origin_threshold_label = ttk.Label(top, text="真上しきい値[deg]")
+    pack_maybe(origin_threshold_label, side="left", padx=(16, 2))
     origin_threshold_var = tk.DoubleVar(value=ORIGIN_MODE_THRESHOLD['deg'])
-    ttk.Entry(top, textvariable=origin_threshold_var, width=6).pack(side="left")
+    origin_threshold_entry = ttk.Entry(top, textvariable=origin_threshold_var, width=6)
+    pack_maybe(origin_threshold_entry, side="left")
 
     def apply_origin_threshold():
         try:
@@ -1424,12 +2135,25 @@ def run_gui(port: str) -> None:
         except tk.TclError:
             pass  # invalid entry text — leave the threshold unchanged
 
-    ttk.Button(top, text="適用", command=apply_origin_threshold).pack(side="left", padx=(2, 0))
+    origin_threshold_btn = ttk.Button(top, text="適用", command=apply_origin_threshold)
+    pack_maybe(origin_threshold_btn, side="left", padx=(2, 0))
+
+    # School mode: Start also stamps the current group ID into the log
+    # filename (see LinkManager._open_log); group_var is unused otherwise.
+    group_var = tk.StringVar(value='1')
+
+    def do_start():
+        if school:
+            link.group_tag = group_var.get().strip()
+        link.start_requested.set()
 
     stop_btn = ttk.Button(top, text="Stop", command=link.stop_requested.set)
-    start_btn = ttk.Button(top, text="Start", command=link.start_requested.set)
+    start_btn = ttk.Button(top, text="Start", command=do_start)
     stop_btn.pack(side="right", padx=4)
     start_btn.pack(side="right", padx=4)
+
+    if school:
+        ttk.Button(top, text="詳細設定(指導者用)", command=toggle_advanced).pack(side="right", padx=(0, 12))
 
     mode_var = tk.StringVar(value=link.selected_mode)
 
@@ -1437,7 +2161,7 @@ def run_gui(port: str) -> None:
         link.selected_mode = mode_var.get()
 
     mode_frame = ttk.Frame(top)
-    mode_frame.pack(side="right", padx=12)
+    pack_maybe(mode_frame, side="right", padx=12)
     mode_b_radio = ttk.Radiobutton(mode_frame, text="Mode B (Python PID)",
                                     variable=mode_var, value='B', command=on_mode_change)
     mode_c_radio = ttk.Radiobutton(mode_frame, text="Mode C (Python swing-up)",
@@ -1453,7 +2177,7 @@ def run_gui(port: str) -> None:
 
     # --- Swing-up parameter panel (Mode C) — live-tunable, no restart needed ---
     swingup_frame = ttk.LabelFrame(root, text="Swing-up params (Mode C)", padding=6)
-    swingup_frame.pack(fill="x", padx=8, pady=(0, 8))
+    pack_maybe(swingup_frame, fill="x", padx=8, pady=(0, 8))
 
     swingup_vars = {key: tk.DoubleVar(value=val) for key, val in SWINGUP_PARAMS.items()}
     swingup_labels = {
@@ -1484,7 +2208,7 @@ def run_gui(port: str) -> None:
     # tuned directly, matching SWINGUP_PARAMS' live-tunable-with-no-restart
     # pattern above.
     balance_frame = ttk.LabelFrame(root, text="Balance controller (Mode C up-mode)", padding=6)
-    balance_frame.pack(fill="x", padx=8, pady=(0, 8))
+    pack_maybe(balance_frame, fill="x", padx=8, pady=(0, 8))
 
     balance_ctrl_var = tk.StringVar(value=link.balance_controller)
 
@@ -1535,7 +2259,7 @@ def run_gui(port: str) -> None:
     # KalmanObserver's own noise knobs, row 1 is DisturbanceObserver's extra
     # disturbance-channel knobs (only used when observer_dob is selected).
     observer_frame = ttk.LabelFrame(root, text="Kalman Observer / 外乱オブザーバ (LQR用状態推定)", padding=6)
-    observer_frame.pack(fill="x", padx=8, pady=(0, 8))
+    pack_maybe(observer_frame, fill="x", padx=8, pady=(0, 8))
 
     observer_vars = {key: tk.DoubleVar(value=val) for key, val in OBSERVER_PARAMS.items()}
     observer_labels = {
@@ -1567,6 +2291,297 @@ def run_gui(port: str) -> None:
 
     ttk.Button(observer_frame, text="適用", command=apply_observer_params).grid(row=0, column=10, rowspan=2, padx=8)
 
+    # --- School mode: Step1-8 Notebook tabs (see STEP_DEFS) ---
+    capture_stats = {'A': None, 'B': None}
+    capture_label_vars = {'A': tk.StringVar(value='記録A: -'), 'B': tk.StringVar(value='記録B: -')}
+    step_slider_vars = {}   # step_key -> {slider_key: DoubleVar}
+    sysid_ui = {}           # 'result_var' stashed here so tick() can update it
+    notebook = None
+
+    if school:
+        school_frame = ttk.LabelFrame(root, text="スクールモード", padding=8)
+        school_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+        top_row = ttk.Frame(school_frame)
+        top_row.pack(fill="x")
+        ttk.Label(top_row, text="グループID:").pack(side="left")
+        ttk.Entry(top_row, textvariable=group_var, width=4).pack(side="left", padx=(4, 16))
+
+        notebook = ttk.Notebook(school_frame)
+        notebook.pack(fill="x", pady=(6, 0))
+
+        def apply_step_sliders(step_key):
+            if step_key == 'step6':
+                # Step6 has no top-level 'sliders'/'apply' (see
+                # STEP_DEFS['step6']['modes']) -- always re-applies whichever
+                # mode is currently selected, mirroring
+                # apply_current_step_sliders()'s own "always re-derive, never
+                # bake in a stale value" reasoning below.
+                mode_def = STEP_DEFS['step6']['modes'][link.step6_mode]
+                values = {s['key']: step_slider_vars['step6'][s['key']].get() for s in mode_def['sliders']}
+                mode_def['apply'](values)
+                return
+            step_def = STEP_DEFS[step_key]
+            values = {s['key']: step_slider_vars[step_key][s['key']].get() for s in step_def['sliders']}
+            step_def['apply'](values)
+
+        def apply_current_step_sliders():
+            # Always re-applies whichever Step is *currently selected*,
+            # never a step_key baked in at widget-construction time. This
+            # matters because shared sliders (see shared_slider_vars below)
+            # are driven by one tk.DoubleVar watched by several Steps'
+            # Scale widgets at once -- Tk invokes every one of those
+            # widgets' own -command callback when the shared variable
+            # changes, not just the one the user is actually looking at.
+            # Re-deriving from link.current_step every time keeps the
+            # result correct (e.g. Step2's apply forcing Kd=0 must never
+            # fire just because its hidden Scale also noticed the shared
+            # Kp variable move while Step4 is the active tab).
+            apply_step_sliders(link.current_step)
+
+        def bind_scale_click_to_jump(scale) -> None:
+            """ttk.Scale's default click-on-trough behaviour nudges toward
+            the click by one page-increment instead of jumping straight
+            there, which reads as unresponsive for a click-to-set slider.
+            Repositioning directly to the clicked point *before* the
+            default binding runs (an instance binding fires ahead of the
+            widget's class binding) makes clicking behave as expected,
+            while leaving the class binding's own press/drag handling
+            intact for normal dragging afterwards."""
+            def _jump(event):
+                frm, to = float(scale.cget('from')), float(scale.cget('to'))
+                width = scale.winfo_width()
+                if width > 1:
+                    frac = min(1.0, max(0.0, event.x / width))
+                    scale.set(frm + frac * (to - frm))
+            scale.bind('<Button-1>', _jump)
+
+        def make_slider_row(parent, row, var, spec, on_apply):
+            """One Step slider row: label, draggable/click-to-jump Scale,
+            and a live numeric readout that's also directly editable
+            (Enter or focus-out commits a typed value)."""
+            ttk.Label(parent, text=spec['label']).grid(row=row, column=0, sticky="e", padx=(0, 6), pady=2)
+            scale = ttk.Scale(parent, from_=spec['frm'], to=spec['to'], variable=var, orient="horizontal",
+                               length=200, command=lambda _=None: on_apply())
+            scale.grid(row=row, column=1, sticky="w", pady=2)
+            bind_scale_click_to_jump(scale)
+
+            entry_var = tk.StringVar(value=f"{var.get():.3g}")
+            entry = ttk.Entry(parent, textvariable=entry_var, width=8)
+            entry.grid(row=row, column=2, padx=(8, 0), pady=2)
+
+            def sync_entry_from_var(*_):
+                entry_var.set(f"{var.get():.3g}")
+
+            def commit_entry(event=None):
+                try:
+                    val = float(entry_var.get())
+                except ValueError:
+                    sync_entry_from_var()  # invalid text -- revert to current value
+                    return
+                var.set(min(spec['to'], max(spec['frm'], val)))
+                sync_entry_from_var()
+                on_apply()
+
+            var.trace_add('write', sync_entry_from_var)
+            entry.bind('<Return>', commit_entry)
+            entry.bind('<FocusOut>', commit_entry)
+
+        # Slider specs may tag a `shared` group name (see STEP_DEFS's step2/
+        # step3/step4 target_deg/Kp/Kd) so multiple Steps' widgets drive the
+        # exact same tk.DoubleVar -- moving/typing into any one of them
+        # updates all the others immediately, with no separate save/restore
+        # logic needed.
+        shared_slider_vars = {}
+
+        def build_step6_tab(frame):
+            """Step6's 3-mode panel (see STEP_DEFS['step6']['modes']): a
+            radio button switches link.step6_mode, which swaps the entire
+            slider set below it -- unlike every other step's fixed slider
+            list, so it can't be built by the generic loop this is called
+            from."""
+            mode_var = tk.StringVar(value=link.step6_mode)
+
+            mode_row = ttk.Frame(frame)
+            mode_row.pack(fill="x", pady=(0, 8))
+            ttk.Label(mode_row, text="調整方法:").pack(side="left")
+
+            slider_frame = ttk.Frame(frame)
+
+            def reflect_step4_values():
+                # "反転版" only: copies Step4's CURRENT Kp/Kd/k1/k2 sliders
+                # into Step6-inverted's own (same key names, pure coincidence
+                # that's convenient here) -- a one-time snapshot copy, not a
+                # live link, so it's a starting point to then adjust further,
+                # not something that keeps tracking Step4 afterwards.
+                #
+                # k1/k2 (the gains ON the pendulum's own state) are negated
+                # on copy -- the sign that damps the pendulum at hang-down
+                # generally needs to flip to have any hope of counteracting
+                # it near upright instead (see the earlier discussion on why
+                # this mode is a "watch it fail and see why" exploration,
+                # not a working stabilizer). Kp/Kd (the rotor's OWN
+                # position-hold PD, not a pendulum-facing gain) are copied
+                # as-is -- no comparable reason to flip those.
+                step4_vars = step_slider_vars.get('step4', {})
+                sign = {'Kp': 1.0, 'Kd': 1.0, 'k1': -1.0, 'k2': -1.0}
+                for key in ('Kp', 'Kd', 'k1', 'k2'):
+                    if key in step4_vars and key in step_slider_vars.get('step6', {}):
+                        step_slider_vars['step6'][key].set(sign[key] * step4_vars[key].get())
+                apply_step_sliders('step6')
+
+            def render_step6_sliders():
+                for w in slider_frame.winfo_children():
+                    w.destroy()
+                mode_def = STEP_DEFS['step6']['modes'][mode_var.get()]
+                step_slider_vars['step6'] = {}
+                for i, s in enumerate(mode_def['sliders']):
+                    var = tk.DoubleVar(value=s['default'])
+                    step_slider_vars['step6'][s['key']] = var
+                    make_slider_row(slider_frame, i, var, s, apply_current_step_sliders)
+                if mode_var.get() == 'inverted':
+                    ttk.Button(slider_frame, text="Step4の値を反映",
+                               command=reflect_step4_values).grid(
+                        row=len(mode_def['sliders']), column=0, columnspan=3, pady=(6, 0))
+
+            def on_step6_mode_change():
+                link.step6_mode = mode_var.get()
+                render_step6_sliders()
+                apply_step_sliders('step6')
+
+            for mode_key, mode_def in STEP_DEFS['step6']['modes'].items():
+                ttk.Radiobutton(mode_row, text=mode_def['mode_label'], variable=mode_var,
+                                 value=mode_key, command=on_step6_mode_change).pack(side="left", padx=(8, 0))
+
+            slider_frame.pack(fill="x")
+            render_step6_sliders()
+            apply_step_sliders('step6')
+
+        for step_key in STEP_ORDER:
+            step_def = STEP_DEFS[step_key]
+            frame = ttk.Frame(notebook, padding=8)
+            notebook.add(frame, text=step_def['label'])
+
+            ttk.Label(frame, text=step_def['challenge'], wraplength=800,
+                      justify="left", font=("", 10, "bold")).pack(fill="x", pady=(0, 8))
+
+            if step_key == 'step6':
+                # 3 distinct slider sets behind a mode radio button (see
+                # STEP_DEFS['step6']['modes']) instead of one fixed set --
+                # handled entirely separately from the generic per-step loop
+                # below.
+                build_step6_tab(frame)
+                continue
+
+            slider_frame = ttk.Frame(frame)
+            slider_frame.pack(fill="x")
+            step_slider_vars[step_key] = {}
+            for i, s in enumerate(step_def['sliders']):
+                tag = s.get('shared')
+                if tag is not None:
+                    if tag not in shared_slider_vars:
+                        shared_slider_vars[tag] = tk.DoubleVar(value=s['default'])
+                    var = shared_slider_vars[tag]
+                else:
+                    var = tk.DoubleVar(value=s['default'])
+                step_slider_vars[step_key][s['key']] = var
+                make_slider_row(slider_frame, i, var, s, apply_current_step_sliders)
+
+            if step_def.get('has_controller_choice'):
+                # Step8: reuse the existing advanced-panel PID/LQR selector
+                # (balance_ctrl_var/on_balance_ctrl_change, defined above for
+                # the "詳細設定" panel) so both stay in sync automatically.
+                choice_frame = ttk.Frame(frame)
+                choice_frame.pack(fill="x", pady=(8, 0))
+                ttk.Label(choice_frame, text="上側(倒立後)の制御則:").pack(side="left")
+                ttk.Radiobutton(choice_frame, text="PID (Step6)", variable=balance_ctrl_var,
+                                value='pid', command=on_balance_ctrl_change).pack(side="left", padx=(8, 0))
+                ttk.Radiobutton(choice_frame, text="LQR (Step7)", variable=balance_ctrl_var,
+                                value='lqr', command=on_balance_ctrl_change).pack(side="left", padx=(8, 0))
+
+            if step_def.get('has_sysid'):
+                sysid_frame = ttk.LabelFrame(frame, text="簡易システム同定(未検証)", padding=6)
+                sysid_frame.pack(fill="x", pady=(10, 0))
+                ttk.Label(sysid_frame, wraplength=760, justify="left", text=(
+                    "振り子が下で静止しているときだけ使えます。約18秒励振してモデルを推定し、"
+                    "既に倒立状態で分かっている値と比べて妥当かを確認してから採用してください。"
+                    "簡易版・未検証の機能です。"
+                )).pack(fill="x")
+                result_var = tk.StringVar(value="(まだ推定していません)")
+                sysid_ui['result_var'] = result_var
+                ttk.Label(sysid_frame, textvariable=result_var, justify="left").pack(fill="x", pady=(4, 4))
+                btn_row = ttk.Frame(sysid_frame)
+                btn_row.pack(fill="x")
+
+                def do_start_excitation():
+                    if link.state == STATE_RUNNING and link.origin_mode == 'down':
+                        link.start_excitation()
+                        sysid_ui['_last_shown'] = None
+                        sysid_ui['_aborted_shown'] = False
+                        result_var.set("励振中…")
+
+                def do_adopt():
+                    link.adopt_sysid_result()
+                    result_var.set(
+                        f"採用しました: w0_sq={MODEL_W0_SQ:.3f}  gamma={MODEL_GAMMA:.4f}  k={MODEL_K:.4f}")
+
+                ttk.Button(btn_row, text="励振開始", command=do_start_excitation).pack(side="left")
+                ttk.Button(btn_row, text="採用する", command=do_adopt).pack(side="left", padx=(8, 0))
+
+        def on_tab_change(event=None):
+            # Applies live, even mid-session -- see set_current_step()'s
+            # docstring for why switching Steps doesn't need a Stop/Start.
+            step_key = STEP_ORDER[notebook.index('current')]
+            link.set_current_step(step_key)
+            apply_step_sliders(step_key)
+
+        notebook.bind('<<NotebookTabChanged>>', on_tab_change)
+        on_tab_change()
+
+        def reset_current_step():
+            step_key = STEP_ORDER[notebook.index('current')]
+            if step_key == 'step6':
+                mode_def = STEP_DEFS['step6']['modes'][link.step6_mode]
+                for s in mode_def['sliders']:
+                    step_slider_vars['step6'][s['key']].set(s['default'])
+            else:
+                for s in STEP_DEFS[step_key]['sliders']:
+                    step_slider_vars[step_key][s['key']].set(s['default'])
+            apply_step_sliders(step_key)
+
+        button_row = ttk.Frame(school_frame)
+        button_row.pack(fill="x", pady=(6, 0))
+        ttk.Button(button_row, text="このStepの既定値にリセット",
+                   command=reset_current_step).pack(side="left")
+
+        capture_row = ttk.Frame(school_frame)
+        capture_row.pack(fill="x", pady=(6, 0))
+
+        def capture(slot):
+            n = min(len(link.data[0]), 500)
+            if n < 10:
+                return
+            stat = float(np.std(list(link.data[0])[-n:]))
+            capture_stats[slot] = stat
+            capture_label_vars[slot].set(f"記録{slot}: 揺れ幅(標準偏差) {stat:.2f}°")
+            out_dir = LOG_DIR / "school_captures"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            group = group_var.get().strip() or '0'
+            fname = out_dir / f"{time.strftime('%Y%m%d_%H%M%S')}_group{group}_{link.current_step}_{slot}.png"
+            fig.savefig(fname)
+
+        ttk.Button(capture_row, text="記録A(変更前)", command=lambda: capture('A')).pack(side="left")
+        ttk.Label(capture_row, textvariable=capture_label_vars['A']).pack(side="left", padx=(6, 20))
+        ttk.Button(capture_row, text="記録B(変更後)", command=lambda: capture('B')).pack(side="left")
+        ttk.Label(capture_row, textvariable=capture_label_vars['B']).pack(side="left", padx=(6, 20))
+
+        def emergency_stop(event=None):
+            link.stop_requested.set()
+
+        ttk.Button(capture_row, text="緊急停止(Space/Esc)", command=emergency_stop).pack(side="right")
+        root.bind('<space>', emergency_stop)
+        root.bind('<Escape>', emergency_stop)
+
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
     # Pendulum Angle shows theta_p_perceived (Mode C: whichever origin Python
     # currently treats as 0, see _step_running() -- jumps by ~180 deg at the
@@ -1578,6 +2593,14 @@ def run_gui(port: str) -> None:
         lines.append(line)
         ax[i].set_ylabel(labels[i])
     ax[-1].set_xlabel("Sample")
+
+    target_line = None
+    if school:
+        # Step2/3 only (see LinkManager.target_data) -- actual-vs-target
+        # overlay on the Rotor Angle axes.
+        target_line, = ax[1].plot([], [], linestyle='--', color='tab:orange', label='目標角度')
+        ax[1].legend(loc='upper right', fontsize=8)
+
     fig.tight_layout()
 
     canvas = FigureCanvasTkAgg(fig, master=root)
@@ -1596,6 +2619,27 @@ def run_gui(port: str) -> None:
         mode_1_radio.state(['!disabled'] if at_prompt else ['disabled'])
         mode_d_radio.state(['!disabled'] if at_prompt else ['disabled'])
 
+        if school:
+            # Only (re-)render when a *new* fit object shows up -- otherwise
+            # this would stomp on the "採用しました" message do_adopt() sets,
+            # since link.sysid_result itself doesn't change on adopt.
+            if ('result_var' in sysid_ui and link.sysid_result is not None
+                    and link.sysid_result is not sysid_ui.get('_last_shown')):
+                sysid_ui['_last_shown'] = link.sysid_result
+                fit = link.sysid_result
+                sysid_ui['result_var'].set(
+                    f"推定結果: w0_sq={fit['w0_sq']:.2f} (既存値{MODEL_W0_SQ:.2f})  "
+                    f"gamma={fit['gamma']:.4f} (既存値{MODEL_GAMMA:.4f})  "
+                    f"k={fit['k']:.4f} (既存値{MODEL_K:.4f})  "
+                    f"R²={fit['r_squared']:.3f}  条件数={fit['condition_number']:.1f}")
+
+            if ('result_var' in sysid_ui and link.sysid_aborted
+                    and not sysid_ui.get('_aborted_shown')):
+                sysid_ui['_aborted_shown'] = True
+                sysid_ui['result_var'].set(
+                    "安全のため励振を中断しました(振れが大きくなりすぎました)。"
+                    "振幅を下げて再挑戦してください。")
+
         if link.selected_mode == 'C' and link.state == STATE_RUNNING:
             if link.origin_mode == 'up':
                 origin_mode_var.set("原点: 真上")
@@ -1609,6 +2653,8 @@ def run_gui(port: str) -> None:
 
         for i in range(3):
             lines[i].set_data(range(len(link.data[i])), list(link.data[i]))
+        if target_line is not None:
+            target_line.set_data(range(len(link.target_data)), list(link.target_data))
         for i in range(3):
             ax[i].relim()
             ax[i].autoscale_view()
@@ -1659,10 +2705,14 @@ def main() -> None:
     parser.add_argument('--gui', action='store_true',
                          help="show a live-plot GUI with Start/Stop buttons "
                               "instead of the CLI loop")
+    parser.add_argument('--school', action='store_true',
+                         help="simplified slider-driven GUI for high-school "
+                              "outreach sessions (implies --gui); see "
+                              "STEP_DEFS")
     args = parser.parse_args()
 
-    if args.gui:
-        run_gui(args.port)
+    if args.gui or args.school:
+        run_gui(args.port, school=args.school)
     else:
         ser = connect_and_select_mode(args.port)
         run_cli(ser)
