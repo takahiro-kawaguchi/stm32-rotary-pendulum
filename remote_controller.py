@@ -1895,6 +1895,12 @@ class LinkManager:
                     self.dob.reset()
                     self.swing_ctrl.reset()
                 u = self.swing_ctrl.compute(theta_p, theta_r, omega_r)
+                # Same target_data/target_line overlay Step2/3 use (see
+                # below), just fed from the swing-up engine's own internal
+                # target instead -- the rotor-position setpoint it's
+                # currently chasing toward, bumped by stage_amp_deg at each
+                # zero-crossing (see SwingUpController's docstring).
+                self.target_data.append(self.swing_ctrl._rotor_target_deg)
                 if self.school_mode:
                     u *= STEP_GAINS['swing_gain']
             self._last_u_python = u
@@ -2631,8 +2637,10 @@ def run_gui(port: str, school: bool = False) -> None:
 
     target_line = None
     if school:
-        # Step2/3 only (see LinkManager.target_data) -- actual-vs-target
-        # overlay on the Rotor Angle axes.
+        # Step2/3 (rotor-position PD target) and swing-up/Step5/Step8
+        # (SwingUpController's own internal rotor target -- see
+        # LinkManager.target_data) -- actual-vs-target overlay on the
+        # Rotor Angle axes.
         target_line, = ax[1].plot([], [], linestyle='--', color='tab:orange', linewidth=1.8, label='目標角度')
         ax[1].legend(loc='upper right', fontsize=11)
 
