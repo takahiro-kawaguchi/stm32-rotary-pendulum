@@ -1979,7 +1979,24 @@ def run_gui(port: str, school: bool = False) -> None:
 
     root = tk.Tk()
     root.title("STM32 Pendulum — Remote Controller")
-    root.geometry("900x650")
+    root.geometry("1700x950")
+
+    # 2026-07-20: bumped from the original 900x650 -- the plot and every
+    # widget were too small to read at classroom/demo distance. UI_FONT
+    # backs a broad ttk style override (base widgets, LabelFrame titles,
+    # Notebook tabs); BIG_FONT is reserved for Start/Stop specifically (see
+    # "Big.TButton" below) so they stay unmissable at a glance. Individual
+    # widgets that hardcode their own `font=(...)` (e.g. the Step challenge
+    # text) still need bumping by hand -- ttk.Style only covers widgets that
+    # don't override their own font.
+    UI_FONT = ("Yu Gothic UI", 13)
+    BIG_FONT = ("Yu Gothic UI", 22, "bold")
+    style = ttk.Style()
+    style.configure(".", font=UI_FONT)
+    style.configure("TLabelframe.Label", font=(UI_FONT[0], UI_FONT[1], "bold"))
+    style.configure("TNotebook.Tab", font=UI_FONT, padding=(12, 6))
+    style.configure("TButton", padding=6)
+    style.configure("Big.TButton", font=BIG_FONT, padding=(28, 18))
 
     # School mode only: the instructor-facing "詳細設定" toggle (see below)
     # shows/hides the advanced widgets collected here instead of them always
@@ -2017,7 +2034,7 @@ def run_gui(port: str, school: bool = False) -> None:
     # -> 0 = upright" frame switch be verified visually before any control
     # law is reconnected.
     origin_mode_var = tk.StringVar(value="原点: —")
-    origin_mode_label = ttk.Label(top, textvariable=origin_mode_var, font=("", 10, "bold"))
+    origin_mode_label = ttk.Label(top, textvariable=origin_mode_var, font=(UI_FONT[0], UI_FONT[1], "bold"))
     pack_maybe(origin_mode_label, side="left", padx=(16, 0))
 
     origin_threshold_label = ttk.Label(top, text="真上しきい値[deg]")
@@ -2044,10 +2061,10 @@ def run_gui(port: str, school: bool = False) -> None:
             link.group_tag = group_var.get().strip()
         link.start_requested.set()
 
-    stop_btn = ttk.Button(top, text="Stop", command=link.stop_requested.set)
-    start_btn = ttk.Button(top, text="Start", command=do_start)
-    stop_btn.pack(side="right", padx=4)
-    start_btn.pack(side="right", padx=4)
+    stop_btn = ttk.Button(top, text="Stop", command=link.stop_requested.set, style="Big.TButton")
+    start_btn = ttk.Button(top, text="Start", command=do_start, style="Big.TButton")
+    stop_btn.pack(side="right", padx=6)
+    start_btn.pack(side="right", padx=6)
 
     if school:
         ttk.Button(top, text="詳細設定(指導者用)", command=toggle_advanced).pack(side="right", padx=(0, 12))
@@ -2072,8 +2089,51 @@ def run_gui(port: str, school: bool = False) -> None:
     mode_1_radio.pack(side="left")
     mode_d_radio.pack(side="left")
 
+    # --- Two-column body: waveform on the left, every settings panel on the
+    # right (2026-07-20, replacing the old single top-to-bottom stack where
+    # the plot only got whatever vertical space was left over below a tall
+    # stack of panels). Equal-weighted 50/50 split via grid, both sides
+    # filling the window's full height.
+    main_pane = ttk.Frame(root)
+    main_pane.pack(fill="both", expand=True)
+    main_pane.columnconfigure(0, weight=1)
+    main_pane.columnconfigure(1, weight=1)
+    main_pane.rowconfigure(0, weight=1)
+
+    left_frame = ttk.Frame(main_pane)
+    left_frame.grid(row=0, column=0, sticky="nsew")
+
+    # Right column's panels can add up to more vertical space than the
+    # window is tall (all of swingup/balance/observer plus, in school mode,
+    # 8 Step tabs) -- wrap in a scrollable canvas rather than letting
+    # content get clipped or forcing the window ever-taller. settings_frame
+    # (not right_frame directly) is what every panel below is built inside.
+    right_frame = ttk.Frame(main_pane)
+    right_frame.grid(row=0, column=1, sticky="nsew")
+    right_canvas = tk.Canvas(right_frame, highlightthickness=0)
+    right_scrollbar = ttk.Scrollbar(right_frame, orient="vertical", command=right_canvas.yview)
+    settings_frame = ttk.Frame(right_canvas)
+    settings_frame.bind("<Configure>",
+                         lambda e: right_canvas.configure(scrollregion=right_canvas.bbox("all")))
+    right_canvas_window = right_canvas.create_window((0, 0), window=settings_frame, anchor="nw")
+    right_canvas.bind("<Configure>",
+                       lambda e: right_canvas.itemconfigure(right_canvas_window, width=e.width))
+    right_canvas.configure(yscrollcommand=right_scrollbar.set)
+    right_canvas.pack(side="left", fill="both", expand=True)
+    right_scrollbar.pack(side="right", fill="y")
+
+    def _on_mousewheel(event):
+        right_canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    # Scoped to only fire while the cursor is actually over the right
+    # column (bind_all while hovering, unbind on leave) -- an unscoped
+    # bind_all would hijack scrolling anywhere in the window, including
+    # over the plot on the left.
+    right_canvas.bind("<Enter>", lambda e: right_canvas.bind_all("<MouseWheel>", _on_mousewheel))
+    right_canvas.bind("<Leave>", lambda e: right_canvas.unbind_all("<MouseWheel>"))
+
     # --- Swing-up parameter panel (Mode C) — live-tunable, no restart needed ---
-    swingup_frame = ttk.LabelFrame(root, text="Swing-up params (Mode C)", padding=6)
+    swingup_frame = ttk.LabelFrame(settings_frame, text="Swing-up params (Mode C)", padding=6)
     pack_maybe(swingup_frame, fill="x", padx=8, pady=(0, 8))
 
     swingup_vars = {key: tk.DoubleVar(value=val) for key, val in SWINGUP_PARAMS.items()}
@@ -2104,7 +2164,7 @@ def run_gui(port: str, school: bool = False) -> None:
     # via Bryson's rule from these bounds (recompute_lqr_gain()) rather than
     # tuned directly, matching SWINGUP_PARAMS' live-tunable-with-no-restart
     # pattern above.
-    balance_frame = ttk.LabelFrame(root, text="Balance controller (Mode C up-mode)", padding=6)
+    balance_frame = ttk.LabelFrame(settings_frame, text="Balance controller (Mode C up-mode)", padding=6)
     pack_maybe(balance_frame, fill="x", padx=8, pady=(0, 8))
 
     balance_ctrl_var = tk.StringVar(value=link.balance_controller)
@@ -2164,7 +2224,7 @@ def run_gui(port: str, school: bool = False) -> None:
     # observer_dob). Same OBSERVER_PARAMS dict backs both -- row 0 is
     # KalmanObserver's own noise knobs, row 1 is DisturbanceObserver's extra
     # disturbance-channel knobs (only used when observer_dob is selected).
-    observer_frame = ttk.LabelFrame(root, text="Kalman Observer / 外乱オブザーバ (LQR用状態推定)", padding=6)
+    observer_frame = ttk.LabelFrame(settings_frame, text="Kalman Observer / 外乱オブザーバ (LQR用状態推定)", padding=6)
     pack_maybe(observer_frame, fill="x", padx=8, pady=(0, 8))
 
     observer_vars = {key: tk.DoubleVar(value=val) for key, val in OBSERVER_PARAMS.items()}
@@ -2205,7 +2265,7 @@ def run_gui(port: str, school: bool = False) -> None:
     notebook = None
 
     if school:
-        school_frame = ttk.LabelFrame(root, text="スクールモード", padding=8)
+        school_frame = ttk.LabelFrame(settings_frame, text="スクールモード", padding=8)
         school_frame.pack(fill="x", padx=8, pady=(0, 8))
 
         top_row = ttk.Frame(school_frame)
@@ -2268,7 +2328,7 @@ def run_gui(port: str, school: bool = False) -> None:
             (Enter or focus-out commits a typed value)."""
             ttk.Label(parent, text=spec['label']).grid(row=row, column=0, sticky="e", padx=(0, 6), pady=2)
             scale = ttk.Scale(parent, from_=spec['frm'], to=spec['to'], variable=var, orient="horizontal",
-                               length=200, command=lambda _=None: on_apply())
+                               length=280, command=lambda _=None: on_apply())
             scale.grid(row=row, column=1, sticky="w", pady=2)
             bind_scale_click_to_jump(scale)
 
@@ -2368,8 +2428,8 @@ def run_gui(port: str, school: bool = False) -> None:
             frame = ttk.Frame(notebook, padding=8)
             notebook.add(frame, text=step_def['label'])
 
-            ttk.Label(frame, text=step_def['challenge'], wraplength=800,
-                      justify="left", font=("", 10, "bold")).pack(fill="x", pady=(0, 8))
+            ttk.Label(frame, text=step_def['challenge'], wraplength=680,
+                      justify="left", font=(UI_FONT[0], 14, "bold")).pack(fill="x", pady=(0, 8))
 
             if step_key == 'step6':
                 # 3 distinct slider sets behind a mode radio button (see
@@ -2400,7 +2460,7 @@ def run_gui(port: str, school: bool = False) -> None:
                 # students can watch the design process land on a concrete
                 # PID before it's ever sent to hardware.
                 step7_pid_var = tk.StringVar(value="換算PIDゲイン: (計算中)")
-                ttk.Label(frame, textvariable=step7_pid_var, wraplength=800,
+                ttk.Label(frame, textvariable=step7_pid_var, wraplength=680,
                           justify="left").pack(fill="x", pady=(10, 0))
 
             if step_def.get('has_controller_choice'):
@@ -2469,28 +2529,34 @@ def run_gui(port: str, school: bool = False) -> None:
         root.bind('<space>', emergency_stop)
         root.bind('<Escape>', emergency_stop)
 
-    fig, ax = plt.subplots(3, 1, sharex=True, figsize=(7, 6))
+    # Bigger figure + larger fonts throughout (2026-07-20) -- fills the
+    # left column, which now gets a full-height half of a much larger
+    # window instead of whatever vertical space was left below a tall
+    # stack of settings panels.
+    plt.rcParams['font.size'] = 13
+    fig, ax = plt.subplots(3, 1, sharex=True, figsize=(9, 9))
     # Pendulum Angle shows theta_p_perceived (Mode C: whichever origin Python
     # currently treats as 0, see _step_running() -- jumps by ~180 deg at the
     # exact moment origin_mode flips, which is expected, not a bug).
     labels = ["Pendulum Angle [deg]", "Rotor Angle [deg]", "Input u [steps/s²]"]
     lines = []
     for i in range(3):
-        line, = ax[i].plot([], [])
+        line, = ax[i].plot([], [], linewidth=1.8)
         lines.append(line)
-        ax[i].set_ylabel(labels[i])
-    ax[-1].set_xlabel("Sample")
+        ax[i].set_ylabel(labels[i], fontsize=14)
+        ax[i].tick_params(labelsize=12)
+    ax[-1].set_xlabel("Sample", fontsize=14)
 
     target_line = None
     if school:
         # Step2/3 only (see LinkManager.target_data) -- actual-vs-target
         # overlay on the Rotor Angle axes.
-        target_line, = ax[1].plot([], [], linestyle='--', color='tab:orange', label='目標角度')
-        ax[1].legend(loc='upper right', fontsize=8)
+        target_line, = ax[1].plot([], [], linestyle='--', color='tab:orange', linewidth=1.8, label='目標角度')
+        ax[1].legend(loc='upper right', fontsize=11)
 
     fig.tight_layout()
 
-    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas = FigureCanvasTkAgg(fig, master=left_frame)
     canvas.get_tk_widget().pack(fill="both", expand=True)
 
     tick_after_id = None
