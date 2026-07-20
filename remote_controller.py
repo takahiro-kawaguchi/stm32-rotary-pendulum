@@ -17,6 +17,9 @@ Usage:
     python remote_controller.py [PORT] --school  # simplified slider GUI for
                                                   # high-school outreach sessions
                                                   # (see STEP_DEFS)
+    python remote_controller.py --demo --gui     # no real hardware needed --
+    python remote_controller.py --demo --school  # PORT is ignored; see
+                                                  # FakeFirmwareSerial
 
 Telemetry from STM32:  i,theta_p_deg,theta_r_deg,omega_p_deg_s,omega_r_deg_s,u_last
 Command to STM32:      'u <steps_per_s2>\\r'    (during balance loop)
@@ -38,6 +41,8 @@ import argparse
 import csv
 import math
 import os
+import queue
+import random
 import sys
 import threading
 import time
@@ -1306,12 +1311,17 @@ STEP_ORDER = ('step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'st
 # CLI mode (unchanged behaviour)
 # ---------------------------------------------------------------------------
 
-def connect_and_select_mode(port: str) -> serial.Serial:
-    try:
-        ser = serial.Serial(port, BAUD, timeout=0.5)
-    except serial.SerialException as e:
-        print(f"Cannot open {port}: {e}")
-        sys.exit(1)
+def connect_and_select_mode(port: str, demo: bool = False) -> serial.Serial:
+    if demo:
+        # No real hardware -- see FakeFirmwareSerial's own module comment.
+        ser = FakeFirmwareSerial(port, BAUD, timeout=0.5)
+        port = "DEMO"
+    else:
+        try:
+            ser = serial.Serial(port, BAUD, timeout=0.5)
+        except serial.SerialException as e:
+            print(f"Cannot open {port}: {e}")
+            sys.exit(1)
 
     print(f"Connected: {port}  {BAUD} baud")
     print("Waiting for mode selection prompt …")
@@ -1983,7 +1993,191 @@ class LinkManager:
         self.data[2].append(u)
 
 
-def run_gui(port: str, school: bool = False) -> None:
+# ---------------------------------------------------------------------------
+# --demo: no real hardware needed. FakeFirmwareSerial stands in for
+# serial.Serial, speaking just enough of the firmware's own protocol (boot
+# banner, mode-selection prompt, CSV telemetry, 'q' full-reset) for
+# LinkManager/run_cli to drive exactly as if a real board were attached.
+#
+# Mode C's physics are genuinely simulated with this file's own identified
+# plant model (MODEL_W0_SQ/GAMMA/K, the same nonlinear equation
+# scratch/identify_pendulum_model.py fit -- see its docstring) integrated
+# forward by whatever 'u' the GUI actually sends, so Mode C's own
+# SwingUpController/DualPidController/LQRController behave close to how
+# they do on real hardware: swing-up genuinely has to pump energy in over
+# several cycles, catches can genuinely be lost, LQR gains that are too
+# aggressive genuinely oscillate. Modes A/B/1/D are only loosely
+# approximated (this file's recent work is almost entirely Mode C) --
+# swing-up there is simulated with a real SwingUpController instance same
+# as Mode C, and the onboard-PID modes (1/D, where the GUI itself never
+# sends 'u') run an internal DualPidController against STEADY_GAINS, but
+# none of that is meant as a rigorous stand-in for the real firmware.
+# ---------------------------------------------------------------------------
+class FakeFirmwareSerial:
+    """Drop-in replacement for serial.Serial covering only what
+    LinkManager/run_cli actually call: readline(), write(), close(). A
+    background thread ticks the simulated physics at 100Hz (matching real
+    telemetry's own rate) and feeds a thread-safe queue that readline()
+    drains -- mimicking a real port's read timeout behavior (returns b''
+    if nothing arrives within `timeout` seconds) rather than blocking
+    forever."""
+
+    # Demo-only centrifugal coupling coefficient, from the original system-
+    # identification session (scratch/identify_pendulum_model.py's full fit
+    # -- h=3.8829) -- dropped from the shipped *linearized* balance-mode
+    # model (MODEL_W0_SQ/GAMMA/K) since it vanishes near upright, but the
+    # simulated swing-up phase here needs it: it's the term through which
+    # rotor motion actually pumps energy into the pendulum.
+    _H_DEMO = 3.8829
+
+    def __init__(self, port: str, baud: int, timeout: float = 0.5):
+        self.port = port
+        self.timeout = timeout
+        self._lock = threading.Lock()
+        self._out_queue = queue.Queue()
+        self._stopped = False
+        self._enter_boot()
+        self._thread = threading.Thread(target=self._tick_loop, daemon=True)
+        self._thread.start()
+
+    # --- pyserial.Serial surface -------------------------------------
+    def readline(self) -> bytes:
+        try:
+            return self._out_queue.get(timeout=self.timeout)
+        except queue.Empty:
+            return b''
+
+    def write(self, data: bytes) -> int:
+        text = data.decode('ascii', errors='ignore').strip()
+        with self._lock:
+            if text == 'q':
+                self._enter_boot()
+            elif self._state == 'at_prompt' and text in ('A', 'B', 'C', '1', 'D'):
+                self._mode = text
+                if text == 'C':
+                    self._state = 'running'
+                else:
+                    self._state = 'swinging_up'
+                    self._enqueue_line(SWING_UP_STARTING)
+            elif self._state == 'running' and text.startswith('u '):
+                try:
+                    self._u_from_gui = float(text[2:])
+                except ValueError:
+                    pass
+            elif self._state == 'running' and text.startswith('r '):
+                try:
+                    self._rotor_ref_from_gui = float(text[2:])
+                except ValueError:
+                    pass
+        return len(data)
+
+    def close(self) -> None:
+        self._stopped = True
+
+    # --- internal simulation -------------------------------------------
+    def _enqueue_line(self, text: str) -> None:
+        self._out_queue.put((text + '\r\n').encode('ascii'))
+
+    def _enter_boot(self) -> None:
+        """(Re)boot: fires once at construction, and again every time 'q'
+        is received -- matches the real firmware's "'q' always triggers a
+        full reset" behavior. Resets every simulated physical/controller
+        state so each demo session starts fresh from hang-down."""
+        self._enqueue_line(BOOT_BANNER)
+        self._enqueue_line(PROMPT_TEXT)
+        self._state = 'at_prompt'
+        self._mode = None
+        self._theta_p = 0.0   # rad, 0 = hang-down (this file's own internal convention)
+        self._theta_r = 0.0
+        self._omega_p = 0.0
+        self._omega_r = 0.0
+        self._i = 0
+        self._u_from_gui = 0.0
+        self._rotor_ref_from_gui = 0.0
+        self._sim_swing = SwingUpController()
+        self._sim_pid = DualPidController()
+        self._sim_in_balance = False
+
+    def _tick_loop(self) -> None:
+        while not self._stopped:
+            time.sleep(_TS)
+            with self._lock:
+                if self._state == 'swinging_up':
+                    self._tick_swingup()
+                elif self._state == 'running':
+                    self._tick_running()
+
+    def _physics_step(self, u_steps_s2: float) -> None:
+        u_rad_s2 = u_steps_s2 * STEPPER_RAD_PER_STEP
+        theta_p_ddot = (
+            -MODEL_W0_SQ * math.sin(self._theta_p)
+            - MODEL_GAMMA * self._omega_p
+            - MODEL_K * math.cos(self._theta_p) * u_rad_s2
+            + self._H_DEMO * math.sin(self._theta_p) * math.cos(self._theta_p) * self._omega_r ** 2
+        )
+        self._omega_p += theta_p_ddot * _TS
+        self._theta_p += self._omega_p * _TS
+        self._omega_r += u_rad_s2 * _TS
+        self._theta_r += self._omega_r * _TS
+        self._i += 1
+
+    def _theta_p_upright_deg(self) -> float:
+        theta_p_deg = math.degrees(self._theta_p)
+        return theta_p_deg - 180.0 if theta_p_deg >= 0 else theta_p_deg + 180.0
+
+    def _tick_swingup(self) -> None:
+        """Modes A/B/1/D only (Mode C never swings up on its own -- see
+        write()). Runs a real SwingUpController instance, silently (no
+        telemetry -- matches the real firmware, which only starts
+        report_telemetry() once the balance loop begins), until the
+        simulated pendulum reaches the capture zone."""
+        theta_p_deg = math.degrees(self._theta_p)
+        theta_r_deg = math.degrees(self._theta_r)
+        omega_r_deg = math.degrees(self._omega_r)
+        u_sim = self._sim_swing.compute(theta_p_deg, theta_r_deg, omega_r_deg)
+        self._physics_step(u_sim)
+        if abs(self._theta_p_upright_deg()) <= PEND_CAPTURE_DEG:
+            self._state = 'running'
+
+    def _tick_running(self) -> None:
+        theta_p_upright = self._theta_p_upright_deg()
+        theta_r_deg = math.degrees(self._theta_r)
+        if self._mode in ('B', 'C'):
+            # CONTROLLER_OPS_REMOTE, matching real firmware: whatever the
+            # GUI's own client-side controller last sent, verbatim.
+            u = self._u_from_gui
+        else:
+            # '1'/'D': onboard PID -- the GUI never sends 'u' for these
+            # (active_control=False), so simulate the firmware's own
+            # control loop with a plain DualPidController/STEADY_GAINS.
+            if not self._sim_in_balance:
+                self._sim_pid.enter_capture(theta_p_upright, theta_r_deg)
+                self._sim_in_balance = True
+            u = self._sim_pid.compute(theta_p_upright, theta_r_deg, 0.0, force_steady=True)
+        self._physics_step(u)
+        self._emit_telemetry(u)
+
+    def _emit_telemetry(self, u: float) -> None:
+        # report_telemetry()'s own branch: Mode C reports 0=hang-down
+        # always; every other mode reports upright-relative phi -- see
+        # CLAUDE.md's wire-protocol section.
+        theta_p_report = math.degrees(self._theta_p) if self._mode == 'C' else self._theta_p_upright_deg()
+        theta_r_report = math.degrees(self._theta_r)
+        omega_p_report = math.degrees(self._omega_p)
+        omega_r_report = math.degrees(self._omega_r)
+        # Light measurement noise for realism -- deliberately not enough to
+        # trip OMEGA_GLITCH_CLAMP_DEG_S or otherwise stress-test glitch
+        # handling; this is a demo aid, not a fault-injection tool.
+        theta_p_report += random.gauss(0.0, 0.05)
+        theta_r_report += random.gauss(0.0, 0.05)
+        omega_p_report += random.gauss(0.0, 1.0)
+        omega_r_report += random.gauss(0.0, 1.0)
+        self._enqueue_line(
+            f"{self._i},{theta_p_report:.3f},{theta_r_report:.3f},"
+            f"{omega_p_report:.3f},{omega_r_report:.3f},{u:.1f}")
+
+
+def run_gui(port: str, school: bool = False, demo: bool = False) -> None:
     # Imported lazily so plain CLI usage never requires matplotlib/tkinter.
     import tkinter as tk
     from tkinter import ttk
@@ -1996,11 +2190,16 @@ def run_gui(port: str, school: bool = False) -> None:
     # fonts; matplotlib silently skips whichever aren't present.
     plt.rcParams['font.family'] = ['Yu Gothic', 'Meiryo', 'MS Gothic', 'sans-serif']
 
-    try:
-        ser = serial.Serial(port, BAUD, timeout=0.5)
-    except serial.SerialException as e:
-        print(f"Cannot open {port}: {e}")
-        sys.exit(1)
+    if demo:
+        # No real hardware -- see FakeFirmwareSerial's own module comment.
+        ser = FakeFirmwareSerial(port, BAUD, timeout=0.5)
+        port = "DEMO"
+    else:
+        try:
+            ser = serial.Serial(port, BAUD, timeout=0.5)
+        except serial.SerialException as e:
+            print(f"Cannot open {port}: {e}")
+            sys.exit(1)
 
     print(f"Connected: {port}  {BAUD} baud")
 
@@ -2737,12 +2936,16 @@ def main() -> None:
                          help="simplified slider-driven GUI for high-school "
                               "outreach sessions (implies --gui); see "
                               "STEP_DEFS")
+    parser.add_argument('--demo', action='store_true',
+                         help="no real hardware needed -- simulates the "
+                              "firmware's serial protocol instead (PORT is "
+                              "ignored); see FakeFirmwareSerial")
     args = parser.parse_args()
 
     if args.gui or args.school:
-        run_gui(args.port, school=args.school)
+        run_gui(args.port, school=args.school, demo=args.demo)
     else:
-        ser = connect_and_select_mode(args.port)
+        ser = connect_and_select_mode(args.port, demo=args.demo)
         run_cli(ser)
 
 
